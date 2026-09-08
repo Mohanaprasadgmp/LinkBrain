@@ -6,10 +6,13 @@ import { LinkCollectionSkeleton } from "@/components/ui/skeleton";
 
 export const metadata: Metadata = { title: "All Links" };
 
-export default function AllLinksPage() {
+export default async function AllLinksPage({ searchParams }: PageProps<"/links">) {
+  const { q } = await searchParams;
+  const query = typeof q === "string" ? q : "";
+
   return (
     <Suspense fallback={<LinkCollectionSkeleton />}>
-      <AllLinksView />
+      <AllLinksView query={query} />
     </Suspense>
   );
 }

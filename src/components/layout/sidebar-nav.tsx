@@ -4,36 +4,38 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { isNavItemActive, type NavItem } from "@/config/nav";
+import type { SidebarCounts } from "@/lib/data";
 import { cn } from "@/lib/utils/cn";
-import { useLinkStore } from "@/store/link-store";
 
 /**
  * The list of nav links, shared by the desktop sidebar and the mobile drawer.
  *
- * Badge counts are derived from the live store rather than stored on the nav
- * config, so Inbox/Favorites counts stay correct as links change without any
- * extra plumbing.
+ * `badgeCounts` is fetched once per request by the workspace layout (see
+ * `app/(workspace)/layout.tsx`) and threaded down as a plain prop, rather
+ * than read from client state — Inbox/Favorites counts now live in Postgres,
+ * not in a client store.
  */
 export function SidebarNav({
   items,
+  badgeCounts,
   onNavigate,
 }: {
   items: NavItem[];
+  badgeCounts: SidebarCounts;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const { links } = useLinkStore();
 
-  const badgeCounts: Record<string, number> = {
-    inbox: links.filter((link) => link.status === "saved").length,
-    favorites: links.filter((link) => link.isFavorite).length,
+  const counts: Record<string, number> = {
+    inbox: badgeCounts.inbox,
+    favorites: badgeCounts.favorites,
   };
 
   return (
     <nav aria-label="Primary" className="flex flex-col gap-0.5">
       {items.map((item) => {
         const active = isNavItemActive(item.href, pathname);
-        const count = item.badge ? badgeCounts[item.badge] : undefined;
+        const count = item.badge ? counts[item.badge] : undefined;
 
         return (
           <Link

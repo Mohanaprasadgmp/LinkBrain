@@ -9,6 +9,7 @@ import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { UserMenu } from "@/components/layout/user-menu";
 import { IconButton } from "@/components/ui/button";
 import { PRIMARY_NAV, SECONDARY_NAV } from "@/config/nav";
+import type { SidebarCounts } from "@/lib/data";
 
 /**
  * The off-canvas navigation drawer shown below the `lg` breakpoint.
@@ -17,7 +18,7 @@ import { PRIMARY_NAV, SECONDARY_NAV } from "@/config/nav";
  * anchored to an edge rather than centred, and closes automatically on
  * navigation rather than requiring an explicit dismiss action.
  */
-export function MobileNav() {
+export function MobileNav({ badgeCounts }: { badgeCounts: SidebarCounts }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -80,12 +81,17 @@ export function MobileNav() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-3">
-              <SidebarNav items={PRIMARY_NAV} onNavigate={() => setOpen(false)} />
+              <SidebarNav
+                items={PRIMARY_NAV}
+                badgeCounts={badgeCounts}
+                onNavigate={() => setOpen(false)}
+              />
             </div>
 
             <div className="border-t border-border px-3 py-3">
               <SidebarNav
                 items={SECONDARY_NAV}
+                badgeCounts={badgeCounts}
                 onNavigate={() => setOpen(false)}
               />
               <div className="mt-2">

@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { ProjectsView } from "@/components/projects/projects-view";
+import { LinkCollectionSkeleton } from "@/components/ui/skeleton";
 
 export const metadata: Metadata = { title: "Projects" };
 
 export default function ProjectsPage() {
-  return <ProjectsView />;
+  return (
+    <Suspense fallback={<LinkCollectionSkeleton />}>
+      <ProjectsView />
+    </Suspense>
+  );
 }

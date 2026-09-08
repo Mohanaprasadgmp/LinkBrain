@@ -8,6 +8,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
+import { useTransition } from "react";
 
 import {
   DropdownMenu,
@@ -16,31 +17,42 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/button";
+import {
+  archiveLink,
+  deleteLink,
+  toggleFavorite,
+  updateLinkPriority,
+  updateLinkStatus,
+} from "@/lib/actions/links";
 import { PRIORITY_OPTIONS } from "@/lib/domain/priority";
 import { STATUS_OPTIONS } from "@/lib/domain/status";
 import type { Link } from "@/lib/domain/types";
-import { useLinkStore } from "@/store/link-store";
 
 /**
  * The "more actions" menu on a link card.
  *
- * Every action here mutates the shared store directly (favorite, status,
- * priority, archive, delete); Edit instead calls back up to the caller, since
- * opening the edit dialog needs to be coordinated with the rest of the page
- * (only one dialog open at a time).
+ * Every mutation here calls its Server Action inside a `useTransition` (menu
+ * items disable while pending, rather than getting `useOptimistic` treatment
+ * like the favourite star) and reports failures via `onError` so the row can
+ * show one shared inline error message regardless of which control caused it.
  */
 export function LinkActionsMenu({
   link,
   onEdit,
-  onDeleted,
+  onError,
 }: {
   link: Link;
   onEdit: (link: Link) => void;
-  /** Called after delete, so a list can drop its own reference if it holds one. */
-  onDeleted?: (id: string) => void;
+  onError: (message: string) => void;
 }) {
-  const { toggleFavorite, setStatus, setPriority, archiveLink, deleteLink } =
-    useLinkStore();
+  const [isPending, startTransition] = useTransition();
+
+  const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok && result.error) onError(result.error);
+    });
+  };
 
   return (
     <DropdownMenu
@@ -59,7 +71,8 @@ export function LinkActionsMenu({
       </DropdownMenuItem>
       <DropdownMenuItem
         icon={<Star className="size-4" />}
-        onSelect={() => toggleFavorite(link.id)}
+        disabled={isPending}
+        onSelect={() => run(() => toggleFavorite(link.id))}
       >
         {link.isFavorite ? "Remove from favorites" : "Add to favorites"}
       </DropdownMenuItem>
@@ -71,7 +84,8 @@ export function LinkActionsMenu({
         <DropdownMenuItem
           key={option.value}
           selected={link.status === option.value}
-          onSelect={() => setStatus(link.id, option.value)}
+          disabled={isPending}
+          onSelect={() => run(() => updateLinkStatus(link.id, option.value))}
         >
           {option.label}
         </DropdownMenuItem>
@@ -84,7 +98,8 @@ export function LinkActionsMenu({
         <DropdownMenuItem
           key={option.value}
           selected={link.priority === option.value}
-          onSelect={() => setPriority(link.id, option.value)}
+          disabled={isPending}
+          onSelect={() => run(() => updateLinkPriority(link.id, option.value))}
         >
           {option.label}
         </DropdownMenuItem>
@@ -101,7 +116,8 @@ export function LinkActionsMenu({
       {link.status !== "archived" ? (
         <DropdownMenuItem
           icon={<Archive className="size-4" />}
-          onSelect={() => archiveLink(link.id)}
+          disabled={isPending}
+          onSelect={() => run(() => archiveLink(link.id))}
         >
           Archive
         </DropdownMenuItem>
@@ -109,10 +125,8 @@ export function LinkActionsMenu({
       <DropdownMenuItem
         icon={<Trash2 className="size-4" />}
         destructive
-        onSelect={() => {
-          deleteLink(link.id);
-          onDeleted?.(link.id);
-        }}
+        disabled={isPending}
+        onSelect={() => run(() => deleteLink(link.id))}
       >
         Delete
       </DropdownMenuItem>

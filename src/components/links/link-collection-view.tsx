@@ -1,6 +1,6 @@
 "use client";
 
-import { Inbox as InboxIcon, type LucideIcon } from "lucide-react";
+import { Archive, Inbox as InboxIcon, Star } from "lucide-react";
 import { useState } from "react";
 
 import { LinkFilters } from "@/components/links/link-filters";
@@ -26,6 +26,12 @@ import { useSearchQuery } from "@/hooks/use-search-query";
  * Uses `useSearchParams` (via `useSearchQuery`), so per the Next.js 16 docs the
  * page rendering this component must wrap it in `<Suspense>`.
  */
+const EMPTY_ICONS = {
+  inbox: InboxIcon,
+  star: Star,
+  archive: Archive,
+} as const;
+
 export interface LinkCollectionViewProps {
   eyebrow: string;
   title: string;
@@ -33,7 +39,15 @@ export interface LinkCollectionViewProps {
   baseLinks: Link[];
   emptyTitle: string;
   emptyDescription: string;
-  emptyIcon?: LucideIcon;
+  /**
+   * A key rather than the icon component itself: the callers that need a
+   * non-default icon (`InboxView`, `FavoritesView`, `ArchiveView`) are Server
+   * Components now, and a raw Lucide component reference can't cross the
+   * Server-to-Client boundary as a prop value — only a plain, serializable
+   * value like a string can. The actual component is resolved here, entirely
+   * client-side.
+   */
+  emptyIcon?: keyof typeof EMPTY_ICONS;
   hideStatusFilter?: boolean;
   onAddLink?: () => void;
 }
@@ -45,7 +59,7 @@ export function LinkCollectionView({
   baseLinks,
   emptyTitle,
   emptyDescription,
-  emptyIcon = InboxIcon,
+  emptyIcon = "inbox",
   hideStatusFilter = false,
   onAddLink,
 }: LinkCollectionViewProps) {
@@ -54,10 +68,14 @@ export function LinkCollectionView({
   const [priority, setPriority] = useState<Priority[]>([]);
   const [sort, setSort] = useState<LinkSort>("newest");
 
-  const filter = { query, status, priority };
-  const filtered = filterLinks(baseLinks, filter);
+  // `baseLinks` is already scoped server-side (page-level status/search via
+  // `query`) — only the in-page status/priority chip filters are applied
+  // here, over that already-narrowed set. `query` still feeds
+  // `isFilterActive` so the empty-state wording and "clear filters" action
+  // stay correct even though the actual text search already happened.
+  const filtered = filterLinks(baseLinks, { status, priority });
   const sorted = sortLinks(filtered, sort);
-  const filtersActive = isFilterActive(filter);
+  const filtersActive = isFilterActive({ query, status, priority });
 
   return (
     <div className="space-y-5">
@@ -91,7 +109,7 @@ export function LinkCollectionView({
         links={sorted}
         emptyState={
           <EmptyState
-            icon={emptyIcon}
+            icon={EMPTY_ICONS[emptyIcon]}
             title={filtersActive ? "No links match" : emptyTitle}
             description={
               filtersActive

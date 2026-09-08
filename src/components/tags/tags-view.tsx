@@ -1,16 +1,15 @@
-"use client";
-
 import { Tags as TagsIcon } from "lucide-react";
+import { connection } from "next/server";
 
 import { TagPill } from "@/components/tags/tag-pill";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHeading } from "@/components/ui/panel";
-import { deriveTags } from "@/lib/utils/tags";
-import { useLinkStore } from "@/store/link-store";
+import { listTagsWithCounts } from "@/lib/data";
 
-export function TagsView() {
-  const { links } = useLinkStore();
-  const tags = deriveTags(links);
+export async function TagsView() {
+  await connection();
+
+  const tags = await listTagsWithCounts();
 
   return (
     <div className="space-y-5">

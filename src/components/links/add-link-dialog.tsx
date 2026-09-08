@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 
+import { useProjects } from "@/components/layout/projects-context";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -9,9 +10,9 @@ import {
   LinkFormFields,
   type LinkFormValues,
 } from "@/components/links/link-form-fields";
+import { createLink } from "@/lib/actions/links";
 import { parseTagInput } from "@/lib/utils/tags";
 import { isValidUrl } from "@/lib/utils/url";
-import { useLinkStore } from "@/store/link-store";
 
 export interface AddLinkDialogProps {
   open: boolean;
@@ -19,9 +20,10 @@ export interface AddLinkDialogProps {
 }
 
 export function AddLinkDialog({ open, onClose }: AddLinkDialogProps) {
-  const { addLink, projects } = useLinkStore();
+  const projects = useProjects();
   const [values, setValues] = useState<LinkFormValues>(EMPTY_LINK_FORM_VALUES);
   const [urlError, setUrlError] = useState<string | undefined>();
+  const [isPending, startTransition] = useTransition();
 
   const reset = () => {
     setValues(EMPTY_LINK_FORM_VALUES);
@@ -29,6 +31,7 @@ export function AddLinkDialog({ open, onClose }: AddLinkDialogProps) {
   };
 
   const handleClose = () => {
+    if (isPending) return;
     reset();
     onClose();
   };
@@ -41,18 +44,26 @@ export function AddLinkDialog({ open, onClose }: AddLinkDialogProps) {
       return;
     }
 
-    addLink({
-      url: values.url,
-      title: values.title,
-      description: values.description,
-      note: values.note,
-      tags: parseTagInput(values.tagsInput),
-      status: values.status,
-      priority: values.priority,
-      projectId: values.projectId || null,
-    });
+    startTransition(async () => {
+      const result = await createLink({
+        url: values.url,
+        title: values.title,
+        description: values.description,
+        note: values.note,
+        tags: parseTagInput(values.tagsInput),
+        status: values.status,
+        priority: values.priority,
+        projectId: values.projectId || null,
+      });
 
-    handleClose();
+      if (!result.ok) {
+        setUrlError(result.error);
+        return;
+      }
+
+      reset();
+      onClose();
+    });
   };
 
   return (
@@ -63,11 +74,11 @@ export function AddLinkDialog({ open, onClose }: AddLinkDialogProps) {
       description="Save a URL to your library. Metadata extraction arrives in a later phase — for now, fill in what you know."
       footer={
         <>
-          <Button variant="ghost" onClick={handleClose}>
+          <Button variant="ghost" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
-          <Button variant="primary" type="submit" form="add-link-form">
-            Save link
+          <Button variant="primary" type="submit" form="add-link-form" disabled={isPending}>
+            {isPending ? "Saving..." : "Save link"}
           </Button>
         </>
       }

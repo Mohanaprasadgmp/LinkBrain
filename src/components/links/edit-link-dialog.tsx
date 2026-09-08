@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 
+import { useProjects } from "@/components/layout/projects-context";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { LinkFormFields, type LinkFormValues } from "@/components/links/link-form-fields";
+import { updateLink } from "@/lib/actions/links";
 import type { Link } from "@/lib/domain/types";
 import { parseTagInput } from "@/lib/utils/tags";
-import { useLinkStore } from "@/store/link-store";
 
 export interface EditLinkDialogProps {
   link: Link | null;
@@ -31,14 +32,16 @@ function valuesFromLink(link: Link): LinkFormValues {
  * The edit dialog.
  *
  * Takes the link to edit directly (rather than an id + open flag) so the
- * dialog only needs to exist, and only reads from the store, while a link is
- * actually being edited.
+ * dialog only needs to exist, and only calls its Server Action, while a link
+ * is actually being edited.
  */
 export function EditLinkDialog({ link, onClose }: EditLinkDialogProps) {
-  const { updateLink, projects } = useLinkStore();
+  const projects = useProjects();
   const [values, setValues] = useState<LinkFormValues | null>(
     link ? valuesFromLink(link) : null,
   );
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   // Re-seed the form whenever a different link is opened for editing.
   // Adjusted during render rather than in an effect, so the new link's values
@@ -48,6 +51,7 @@ export function EditLinkDialog({ link, onClose }: EditLinkDialogProps) {
   if (link !== priorLink) {
     setPriorLink(link);
     setValues(link ? valuesFromLink(link) : null);
+    setError(null);
   }
 
   // Nothing to edit: render nothing rather than an empty dialog shell.
@@ -55,35 +59,47 @@ export function EditLinkDialog({ link, onClose }: EditLinkDialogProps) {
     return null;
   }
 
+  const handleClose = () => {
+    if (isPending) return;
+    onClose();
+  };
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    updateLink(link.id, {
-      title: values.title.trim() || link.title,
-      description: values.description,
-      note: values.note,
-      tags: parseTagInput(values.tagsInput),
-      status: values.status,
-      priority: values.priority,
-      projectId: values.projectId || null,
-    });
+    startTransition(async () => {
+      const result = await updateLink(link.id, {
+        title: values.title.trim() || link.title,
+        description: values.description,
+        note: values.note,
+        tags: parseTagInput(values.tagsInput),
+        status: values.status,
+        priority: values.priority,
+        projectId: values.projectId || null,
+      });
 
-    onClose();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      onClose();
+    });
   };
 
   return (
     <Dialog
       open
-      onClose={onClose}
+      onClose={handleClose}
       title="Edit link"
       description={link.domain}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
-          <Button variant="primary" type="submit" form="edit-link-form">
-            Save changes
+          <Button variant="primary" type="submit" form="edit-link-form" disabled={isPending}>
+            {isPending ? "Saving..." : "Save changes"}
           </Button>
         </>
       }
@@ -97,6 +113,7 @@ export function EditLinkDialog({ link, onClose }: EditLinkDialogProps) {
           projects={projects}
           urlEditable={false}
         />
+        {error ? <p className="mt-3 text-xs text-danger">{error}</p> : null}
       </form>
     </Dialog>
   );

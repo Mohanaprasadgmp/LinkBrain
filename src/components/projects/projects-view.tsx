@@ -1,17 +1,18 @@
-"use client";
-
 import { FolderOpen } from "lucide-react";
+import { connection } from "next/server";
 
 import { ProjectCard } from "@/components/projects/project-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHeading } from "@/components/ui/panel";
-import { countLinksByProject, lastActivityByProject } from "@/lib/links/stats";
-import { useLinkStore } from "@/store/link-store";
+import { getProjectLinkStats, getProjectRepository } from "@/lib/data";
 
-export function ProjectsView() {
-  const { links, projects } = useLinkStore();
-  const counts = countLinksByProject(links);
-  const lastActivity = lastActivityByProject(links, projects);
+export async function ProjectsView() {
+  await connection();
+
+  const [projects, stats] = await Promise.all([
+    getProjectRepository().list(),
+    getProjectLinkStats(),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -33,8 +34,8 @@ export function ProjectsView() {
             <ProjectCard
               key={project.id}
               project={project}
-              linkCount={counts[project.id] ?? 0}
-              lastActivity={lastActivity[project.id] ?? project.updatedAt}
+              linkCount={stats[project.id]?.count ?? 0}
+              lastActivity={stats[project.id]?.lastActivity ?? project.updatedAt}
             />
           ))}
         </div>

@@ -6,10 +6,13 @@ import { LinkCollectionSkeleton } from "@/components/ui/skeleton";
 
 export const metadata: Metadata = { title: "Archive" };
 
-export default function ArchivePage() {
+export default async function ArchivePage({ searchParams }: PageProps<"/archive">) {
+  const { q } = await searchParams;
+  const query = typeof q === "string" ? q : "";
+
   return (
     <Suspense fallback={<LinkCollectionSkeleton />}>
-      <ArchiveView />
+      <ArchiveView query={query} />
     </Suspense>
   );
 }
