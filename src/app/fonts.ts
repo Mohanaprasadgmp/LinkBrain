@@ -1,4 +1,4 @@
-import { Instrument_Serif, Inter } from "next/font/google";
+import { Fraunces, Inter } from "next/font/google";
 
 /**
  * Font definitions, loaded once and imported where needed.
@@ -16,14 +16,18 @@ export const inter = Inter({
 });
 
 /**
- * Display face: page titles and section headings.
+ * Display face: page titles and section headings only — never repeated,
+ * body-level text like link titles, where a display serif reads as noise
+ * rather than hierarchy.
  *
- * Instrument Serif ships a single weight, so `weight` is required here — it is
- * designed to be set large at regular weight, which is exactly how it is used.
+ * Weight 600 keeps Fraunces sturdy at heading sizes; the thinner default
+ * weight (as in e.g. Instrument Serif) reads as fragile once it's on screen
+ * more than once. (`axes` needs `weight: "variable"` to apply, so it's
+ * skipped here in favour of a single fixed weight.)
  */
-export const instrumentSerif = Instrument_Serif({
+export const fraunces = Fraunces({
   subsets: ["latin"],
   display: "swap",
-  weight: "400",
-  variable: "--font-instrument-serif",
+  weight: "600",
+  variable: "--font-fraunces",
 });

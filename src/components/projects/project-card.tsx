@@ -30,7 +30,7 @@ export function ProjectCard({
       </span>
 
       <div>
-        <h3 className="font-display text-lg text-ink">{project.name}</h3>
+        <h3 className="text-base font-semibold text-ink">{project.name}</h3>
         <p className="mt-1 text-sm text-ink-muted">{project.description}</p>
       </div>
 

@@ -114,7 +114,7 @@
   --color-subtle: var(--ink-subtle);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
 
   /* Editorial headings: large, tight, and set in the serif face. */
   --text-display: 2.5rem;

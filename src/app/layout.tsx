@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 import { THEME_SCRIPT, ThemeProvider } from "@/components/theme/theme-provider";
 import { SITE } from "@/config/site";
-import { instrumentSerif, inter } from "./fonts";
+import { fraunces, inter } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${instrumentSerif.variable} h-full`}
+      className={`${inter.variable} ${fraunces.variable} h-full`}
       /*
        * THEME_SCRIPT mutates the class and colorScheme of this element before
        * React hydrates, which React would otherwise report as a mismatch.

@@ -49,7 +49,7 @@ export function LinkCard({
               href={link.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-display text-base leading-snug text-ink hover:text-accent"
+              className="text-[0.9375rem] leading-snug font-semibold text-ink hover:text-accent"
             >
               {link.title}
             </a>
