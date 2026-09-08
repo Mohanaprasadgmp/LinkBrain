@@ -1,0 +1,219 @@
+@import "tailwindcss";
+
+/*
+ * LinkBrain design tokens.
+ *
+ * Every colour in the application is referenced through a semantic token
+ * (`bg-canvas`, `text-ink`, `border-border`) rather than a raw palette class.
+ * Both themes then define the same token set, so dark mode is a variable swap
+ * and components carry almost no `dark:` variants.
+ *
+ * The visual direction is "warm editorial": a warm paper ground rather than
+ * pure white, hairline rules instead of heavy card borders, a serif display
+ * face for headings, and a single indigo-violet accent.
+ */
+
+/*
+ * Drive dark mode from a class on <html> rather than the OS media query, so the
+ * in-app theme toggle can override the system preference. `ThemeProvider`
+ * resolves "system" to the correct class on the client.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Surfaces, warmest to coolest. */
+  --canvas: oklch(98.4% 0.006 75);
+  --surface: oklch(100% 0 0);
+  --surface-sunken: oklch(96.2% 0.008 75);
+  --surface-hover: oklch(97.2% 0.007 75);
+
+  /* Hairlines. */
+  --border: oklch(91.5% 0.008 70);
+  --border-strong: oklch(86% 0.011 70);
+
+  /* Text, strongest to weakest. */
+  --ink: oklch(21% 0.008 55);
+  --ink-muted: oklch(48% 0.012 60);
+  --ink-subtle: oklch(63% 0.012 65);
+
+  /* Accent: indigo-violet. */
+  --accent: oklch(52% 0.198 285);
+  --accent-hover: oklch(46% 0.2 285);
+  --accent-contrast: oklch(99% 0 0);
+
+  /* Status colours. */
+  --success: oklch(52% 0.107 155);
+  --danger: oklch(54% 0.181 25);
+  --warning: oklch(58% 0.124 70);
+  --info: oklch(52% 0.114 235);
+
+  /* Focus ring, shared by every interactive element. */
+  --ring: oklch(52% 0.198 285);
+
+  --shadow-color: 30 20% 40%;
+}
+
+.dark {
+  /* Warm charcoal rather than blue-black, to match the light theme's warmth. */
+  --canvas: oklch(16.5% 0.006 60);
+  --surface: oklch(20.5% 0.007 60);
+  --surface-sunken: oklch(24% 0.008 60);
+  --surface-hover: oklch(26% 0.009 60);
+
+  --border: oklch(30% 0.008 60);
+  --border-strong: oklch(38% 0.01 60);
+
+  --ink: oklch(95% 0.006 75);
+  --ink-muted: oklch(70% 0.012 70);
+  --ink-subtle: oklch(56% 0.012 68);
+
+  --accent: oklch(72% 0.15 288);
+  --accent-hover: oklch(78% 0.14 288);
+  --accent-contrast: oklch(17% 0.01 288);
+
+  --success: oklch(72% 0.13 155);
+  --danger: oklch(70% 0.16 25);
+  --warning: oklch(78% 0.12 75);
+  --info: oklch(72% 0.11 235);
+
+  --ring: oklch(72% 0.15 288);
+
+  --shadow-color: 0 0% 0%;
+}
+
+/*
+ * `inline` resolves the var() references at use time, which is what allows the
+ * same utility class to pick up the light or dark value.
+ */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-hover: var(--surface-hover);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-subtle: var(--ink-subtle);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-contrast: var(--accent-contrast);
+
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+
+  --color-ring: var(--ring);
+
+  /* Shorthands used by the semantic text utilities below. */
+  --color-muted: var(--ink-muted);
+  --color-subtle: var(--ink-subtle);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+
+  /* Editorial headings: large, tight, and set in the serif face. */
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.1;
+  --text-display--letter-spacing: -0.02em;
+
+  --shadow-raised: 0 1px 2px hsl(var(--shadow-color) / 0.06);
+  --shadow-overlay:
+    0 4px 6px -2px hsl(var(--shadow-color) / 0.08),
+    0 12px 24px -6px hsl(var(--shadow-color) / 0.14);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    /* Stops the layout shifting sideways when a dialog locks scrolling. */
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /*
+   * One focus style for the whole app. `:focus-visible` keeps it off mouse
+   * clicks while guaranteeing every control is visibly reachable by keyboard.
+   */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Respect a reduced-motion preference globally rather than per component. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Serif display face, used for page titles and section headings. */
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+  }
+
+  /*
+   * Small-caps section label. Recurs above every list and settings block, so
+   * it earns a utility rather than being repeated as five classes.
+   */
+  .label-eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-subtle);
+  }
+
+  /* Clamp a block of text to a fixed number of lines. */
+  .line-clamp-2-safe {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* A short settle-in used by menus and popovers so they don't seem to teleport. */
+  .animate-in {
+    animation: menu-in 120ms ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-in {
+      animation: none;
+    }
+  }
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
