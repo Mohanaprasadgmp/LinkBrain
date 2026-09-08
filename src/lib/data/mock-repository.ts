@@ -1,6 +1,7 @@
 import { LINK_FIXTURES } from "@/lib/data/fixtures/links";
 import { PROJECT_FIXTURES } from "@/lib/data/fixtures/projects";
 import type { Link, LinkUpdate, NewLinkInput, Project } from "@/lib/domain/types";
+import { pickProjectAccent } from "@/lib/utils/project-accent";
 import { extractDomain, normalizeUrl, titleFromUrl } from "@/lib/utils/url";
 
 import type { LinkRepository, ProjectRepository } from "./repository";
@@ -77,5 +78,40 @@ export class MockProjectRepository implements ProjectRepository {
 
   async get(id: string): Promise<Project | null> {
     return this.projects.find((project) => project.id === id) ?? null;
+  }
+
+  async create(input: { name: string; description?: string }): Promise<Project> {
+    const now = new Date().toISOString();
+    const project: Project = {
+      id: `proj-${crypto.randomUUID()}`,
+      name: input.name,
+      description: input.description ?? "",
+      accent: pickProjectAccent(input.name),
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.projects = [...this.projects, project];
+    return project;
+  }
+
+  async update(
+    id: string,
+    patch: Partial<{ name: string; description: string }>,
+  ): Promise<Project | null> {
+    let updated: Project | null = null;
+
+    this.projects = this.projects.map((project) => {
+      if (project.id !== id) return project;
+      updated = { ...project, ...patch, updatedAt: new Date().toISOString() };
+      return updated;
+    });
+
+    return updated;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    const before = this.projects.length;
+    this.projects = this.projects.filter((project) => project.id !== id);
+    return this.projects.length < before;
   }
 }

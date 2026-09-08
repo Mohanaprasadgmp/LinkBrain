@@ -1,5 +1,6 @@
 import type {
   Link,
+  LinkFilter,
   LinkUpdate,
   NewLinkInput,
   Project,
@@ -8,24 +9,22 @@ import type {
 /**
  * Data access interfaces.
  *
- * This is the contract a future backend must satisfy. A Phase 2
- * `PrismaLinkRepository` (or similar) implements these same methods against a
- * real database; nothing that depends on `LinkRepository` needs to change when
- * that happens — only `lib/data/index.ts` (see below) is edited to construct
- * the new implementation instead of the mock.
+ * This is the contract the backend satisfies. `DrizzleLinkRepository` /
+ * `DrizzleProjectRepository` (in this same directory) implement these methods
+ * against Postgres; nothing that depends on these interfaces needs to change
+ * if the backend is ever swapped again — only `lib/data/index.ts` is edited
+ * to construct a different implementation.
  *
- * Methods are `async` even though `MockLinkRepository` resolves immediately,
- * so code written against this interface is already correct for a
- * network-backed implementation.
- *
- * Note on Phase 1 wiring: the interactive pages in this phase read and mutate
- * client state through `store/link-store.tsx`, whose reducer actions mirror
- * these methods one-to-one (`create` -> `ADD_LINK`, `update` -> `UPDATE_LINK`,
- * etc). This repository is the seam a future server action or route handler
- * will call directly; the store is what today's UI calls.
+ * Methods are `async` so code written against this interface is already
+ * correct for a network-backed implementation (which it now is).
  */
 export interface LinkRepository {
-  list(): Promise<Link[]>;
+  /**
+   * `filter` narrows the result set at the database level — status,
+   * priority, project, favourite, and free-text `query` (matched against
+   * title/description/domain/tags). Omitting it returns everything.
+   */
+  list(filter?: LinkFilter): Promise<Link[]>;
   get(id: string): Promise<Link | null>;
   create(input: NewLinkInput): Promise<Link>;
   update(id: string, patch: LinkUpdate): Promise<Link | null>;
@@ -35,4 +34,10 @@ export interface LinkRepository {
 export interface ProjectRepository {
   list(): Promise<Project[]>;
   get(id: string): Promise<Project | null>;
+  create(input: { name: string; description?: string }): Promise<Project>;
+  update(
+    id: string,
+    patch: Partial<{ name: string; description: string }>,
+  ): Promise<Project | null>;
+  delete(id: string): Promise<boolean>;
 }
