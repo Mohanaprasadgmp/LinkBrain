@@ -14,11 +14,11 @@ export function Logo({ className }: { className?: string }) {
     >
       <span
         aria-hidden="true"
-        className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent font-display text-base text-accent-contrast"
+        className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent text-base font-bold text-accent-contrast"
       >
         L
       </span>
-      <span className="font-display text-lg text-ink">{SITE.name}</span>
+      <span className="text-lg font-bold tracking-tight text-ink">{SITE.name}</span>
     </Link>
   );
 }

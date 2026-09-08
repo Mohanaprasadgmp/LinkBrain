@@ -55,7 +55,7 @@ export function SectionHeading({
     >
       <div className="min-w-0">
         {eyebrow ? <p className="label-eyebrow mb-1.5">{eyebrow}</p> : null}
-        <h2 className="font-display text-xl text-ink sm:text-2xl">{title}</h2>
+        <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">{title}</h2>
         {description ? (
           <p className="mt-1 max-w-prose text-sm text-ink-muted">
             {description}

@@ -9,8 +9,10 @@
  * and components carry almost no `dark:` variants.
  *
  * The visual direction is "warm editorial": a warm paper ground rather than
- * pure white, hairline rules instead of heavy card borders, a serif display
- * face for headings, and a single indigo-violet accent.
+ * pure white, hairline rules instead of heavy card borders, and a single
+ * indigo-violet accent. One sans-serif face (Inter) is used throughout —
+ * headings are set apart by weight and size, not a second typeface, so the
+ * whole app reads as one consistent voice.
  */
 
 /*
@@ -114,9 +116,8 @@
   --color-subtle: var(--ink-subtle);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
 
-  /* Editorial headings: large, tight, and set in the serif face. */
+  /* The largest headline size (the dashboard greeting), tight and bold. */
   --text-display: 2.5rem;
   --text-display--line-height: 1.1;
   --text-display--letter-spacing: -0.02em;
@@ -169,12 +170,6 @@
 }
 
 @layer utilities {
-  /* Serif display face, used for page titles and section headings. */
-  .font-display {
-    font-family: var(--font-display);
-    letter-spacing: -0.015em;
-  }
-
   /*
    * Small-caps section label. Recurs above every list and settings block, so
    * it earns a utility rather than being repeated as five classes.

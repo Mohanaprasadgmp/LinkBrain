@@ -21,7 +21,7 @@ export function SettingsSection({
     <Panel className={cn("overflow-hidden", className)}>
       <div className="border-b border-border px-5 py-4">
         <div className="flex items-center gap-2">
-          <h2 className="font-display text-lg text-ink">{title}</h2>
+          <h2 className="text-lg font-semibold text-ink">{title}</h2>
           {badge ? (
             <span className="rounded-full border border-border bg-surface-sunken px-2 py-0.5 text-[0.6875rem] font-medium text-ink-subtle">
               {badge}

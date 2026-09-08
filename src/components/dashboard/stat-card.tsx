@@ -46,7 +46,7 @@ export function StatCard({
         <Icon aria-hidden="true" className="size-4.5" />
       </span>
       <div className="min-w-0">
-        <p className="font-display text-2xl leading-none text-ink tabular-nums">
+        <p className="text-2xl font-bold leading-none tracking-tight text-ink tabular-nums">
           {value}
         </p>
         <p className="mt-1 truncate text-xs text-ink-muted">{label}</p>

@@ -39,7 +39,7 @@ export function GreetingHeader() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl text-ink sm:text-display">
+      <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-display">
         {greeting}, {firstName}
       </h1>
       <p className="mt-1.5 text-sm text-ink-muted">
