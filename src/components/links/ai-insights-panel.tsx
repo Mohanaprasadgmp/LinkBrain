@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { regenerateAiInsights } from "@/lib/actions/ai";
+import { AI_REGENERATE_COOLDOWN_MS } from "@/lib/ai/constants";
 import type { AiInsight } from "@/lib/domain/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ const MAX_POLLS = 10;
 export function AiInsightsPanel({ linkId, insight }: { linkId: string; insight: AiInsight | null }) {
   const router = useRouter();
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isCoolingDown, setIsCoolingDown] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollCountRef = useRef(0);
 
@@ -62,9 +64,16 @@ export function AiInsightsPanel({ linkId, insight }: { linkId: string; insight: 
         setError(result.error);
         return;
       }
+      // Mirrors the server's own cooldown (`lib/actions/ai.ts`) so the
+      // button visibly enforces the limit instead of only surfacing it as
+      // an error after a click during the window.
+      setIsCoolingDown(true);
+      setTimeout(() => setIsCoolingDown(false), AI_REGENERATE_COOLDOWN_MS);
       router.refresh();
     });
   };
+
+  const isBusy = isRegenerating || isCoolingDown;
 
   return (
     <Panel className="p-5">
@@ -75,7 +84,7 @@ export function AiInsightsPanel({ linkId, insight }: { linkId: string; insight: 
           message="AI analysis hasn't been generated yet."
           buttonLabel="Generate AI insights"
           onClick={handleRegenerate}
-          isBusy={isRegenerating}
+          isBusy={isBusy}
         />
       ) : null}
 
@@ -88,7 +97,7 @@ export function AiInsightsPanel({ linkId, insight }: { linkId: string; insight: 
           message="AI processing failed."
           buttonLabel="Try again"
           onClick={handleRegenerate}
-          isBusy={isRegenerating}
+          isBusy={isBusy}
         />
       ) : null}
 
@@ -133,14 +142,16 @@ export function AiInsightsPanel({ linkId, insight }: { linkId: string; insight: 
             </section>
           ) : null}
 
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleRegenerate}
-            disabled={isRegenerating}
-          >
-            {isRegenerating ? "Regenerating…" : "Regenerate AI"}
-          </Button>
+          <div className="space-y-1">
+            <Button variant="secondary" size="sm" onClick={handleRegenerate} disabled={isBusy}>
+              {isRegenerating ? "Regenerating…" : "Regenerate AI"}
+            </Button>
+            {isCoolingDown && !isRegenerating ? (
+              <p className="text-xs text-ink-subtle">
+                You can regenerate again in a few seconds.
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

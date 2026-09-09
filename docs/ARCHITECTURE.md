@@ -1052,3 +1052,30 @@ Chrome extension APIs.
 Phase 7 adds exactly one: `openai`, the official Node SDK — no validation
 library added alongside it (see "AI enrichment"'s note on why
 `lib/ai/schema.ts` hand-validates instead of using Zod).
+
+## Ideas for later (documented, not implemented)
+
+Recorded during the Phase 7.5 polish pass as legitimate future directions —
+deliberately **not** built now, per that phase's explicit scope boundary
+(no new features, no Phase 8 functionality):
+
+- **Real, working view preferences.** Settings used to show "Open links in
+  a new tab," "Show favicons," and "Compact list view" toggles that looked
+  interactive but had no effect anywhere (removed in Phase 7.5 — see that
+  phase's report). Doing this for real means threading a preference through
+  every link-rendering component (`LinkCard`, `LinkDetailBody`, list views)
+  and persisting it (`localStorage` at minimum, a real user-settings table
+  for something durable across devices) — a small feature, not a one-line
+  fix, and out of scope for a polish phase.
+- **A lightweight tag system**, now that Phase 7's AI already produces
+  per-link topics. Tags were removed in Phase 5 for being unused; AI topics
+  could plausibly seed a "promote this topic to a tag" flow later, without
+  automatically creating persistent tags on the user's behalf (Phase 7's own
+  brief was explicit that AI topics and user tags must stay separate).
+- **Semantic/vector search, "Ask My Links," AI chat, related-links,
+  knowledge packs, recommendations, analytics, digests, notifications** —
+  the standard "AI knowledge platform" feature set every phase from 6B
+  onward has explicitly deferred. LinkBrain's current positioning (a smart
+  bookmark manager, not a knowledge platform) means these should only be
+  built if that positioning deliberately changes, not as an assumed next
+  step.

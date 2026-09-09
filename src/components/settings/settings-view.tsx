@@ -1,38 +1,31 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 
 import { SettingsRow, SettingsSection } from "@/components/settings/settings-section";
 import { ThemeToggle } from "@/components/settings/theme-toggle";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/panel";
-import { Switch } from "@/components/ui/switch";
 import { authClient } from "@/lib/auth-client";
 import type { SessionUser } from "@/lib/auth/session";
 import { initialsFromName } from "@/lib/utils/initials";
 
 /**
- * Preference toggles kept as local component state only.
- *
- * Nothing here is persisted: there is no settings-persistence backend yet,
- * and re-fetching it from `localStorage` would imply a durability the app
- * doesn't actually have. Theme is the one exception (see `ThemeProvider`),
- * because a toggle that visibly reverts itself on reload is worse than one
- * that is honest about being session-only.
+ * Theme is the one preference that's real (see `ThemeProvider`) — there is
+ * no settings-persistence backend for anything else, so this deliberately
+ * doesn't show toggles that would look interactive but do nothing (Phase
+ * 7.5 removed three that used to: a UI control with no effect is worse for
+ * trust than not having the control at all).
  *
  * The Profile/Account sections below are real, though — `user` comes from
  * the authenticated session (`requireUser()`, resolved by
  * `app/(workspace)/settings/page.tsx`), not a fixture. There's no edit-profile
  * flow yet (name/email/avatar are exactly what the sign-up form or Google
- * provided), per this phase's explicit scope: sign-in/out plus "who am I,"
- * not a profile-management system.
+ * provided) — sign-in/out plus "who am I," not a profile-management system.
  */
 export function SettingsView({ user }: { user: SessionUser }) {
-  const [openInNewTab, setOpenInNewTab] = useState(true);
-  const [showFavicons, setShowFavicons] = useState(true);
-  const [compactList, setCompactList] = useState(false);
   const router = useRouter();
   const [isSigningOut, startSignOut] = useTransition();
 
@@ -74,67 +67,16 @@ export function SettingsView({ user }: { user: SessionUser }) {
       </SettingsSection>
 
       <SettingsSection
-        title="Preferences"
-        description="Small behaviours that affect how you browse your library."
+        title="AI insights"
+        description="Automatic summaries, categories, topics and key points for your saved links."
       >
-        <SettingsRow
-          label="Open links in a new tab"
-          description="Keep LinkBrain open in this tab when you follow a link."
-        >
-          <Switch
-            checked={openInNewTab}
-            onCheckedChange={setOpenInNewTab}
-            label="Open links in a new tab"
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Show favicons"
-          description="Display a generated site mark on each link card."
-        >
-          <Switch
-            checked={showFavicons}
-            onCheckedChange={setShowFavicons}
-            label="Show favicons"
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Compact list view"
-          description="Reduce spacing in link lists to fit more on screen."
-        >
-          <Switch
-            checked={compactList}
-            onCheckedChange={setCompactList}
-            label="Compact list view"
-          />
-        </SettingsRow>
-      </SettingsSection>
-
-      <SettingsSection
-        title="AI"
-        description="Automatic categorisation, summaries and Q&A over your library."
-        badge="Coming soon"
-      >
-        <SettingsRow
-          label="Auto-categorize new links"
-          description="Suggest a project when you save a link."
-        >
-          <Switch
-            checked={false}
-            onCheckedChange={() => {}}
-            label="Auto-categorize new links"
-            disabled
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Generate summaries"
-          description="Write a short summary for links that don't have one."
-        >
-          <Switch
-            checked={false}
-            onCheckedChange={() => {}}
-            label="Generate summaries"
-            disabled
-          />
+        <SettingsRow label="How it works">
+          <p className="max-w-sm text-right text-xs text-ink-subtle">
+            Generated automatically when you save a link, shown on that
+            link&rsquo;s own detail page. Regenerate any link&rsquo;s
+            insights from there at any time — there&rsquo;s no setting to
+            turn on here.
+          </p>
         </SettingsRow>
       </SettingsSection>
 

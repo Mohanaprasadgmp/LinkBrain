@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { processLinkAi } from "@/lib/ai/ai-service";
+import { AI_REGENERATE_COOLDOWN_MS } from "@/lib/ai/constants";
 import { isAiConfigured } from "@/lib/ai/openai-client";
 import { requireUserIdForAction } from "@/lib/auth/session";
 import { getAiInsightRepository, getLinkRepository } from "@/lib/data";
@@ -25,8 +26,6 @@ import { err, ok, type ActionResult } from "./result";
  * case where re-fetching is worth it (the page may have changed, or the
  * first fetch may be what failed).
  */
-const REGENERATE_COOLDOWN_MS = 15_000;
-
 export async function regenerateAiInsights(linkId: string): Promise<ActionResult<AiInsight>> {
   const auth = await requireUserIdForAction();
   if (!auth.ok) return err(auth.error);
@@ -44,7 +43,7 @@ export async function regenerateAiInsights(linkId: string): Promise<ActionResult
   if (existing?.status === "processing") {
     return err("AI analysis is already in progress.");
   }
-  if (existing && Date.now() - new Date(existing.updatedAt).getTime() < REGENERATE_COOLDOWN_MS) {
+  if (existing && Date.now() - new Date(existing.updatedAt).getTime() < AI_REGENERATE_COOLDOWN_MS) {
     return err("Please wait a moment before regenerating again.");
   }
   if (!existing) {
