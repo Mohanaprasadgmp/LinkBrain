@@ -36,7 +36,6 @@
   },
   "devDependencies": {
     "@next/env": "^16.3.4",
-    "@rolldown/binding-win32-x64-msvc": "^1.2.7",
     "@tailwindcss/postcss": "^4",
     "@types/chrome": "^0.2.9",
     "@types/node": "^22",
