@@ -12,8 +12,8 @@ import type {
   NewLinkInput,
   Priority,
 } from "@/lib/domain/types";
-import { extractMetadata } from "@/lib/metadata";
-import { isValidUrl, normalizeUrl } from "@/lib/utils/url";
+import { createLinkForUser } from "@/lib/services/link-service";
+import { isValidUrl } from "@/lib/utils/url";
 
 import { err, ok, toErrorMessage, type ActionResult } from "./result";
 
@@ -52,76 +52,25 @@ export type CreateLinkResult =
   | { ok: true; data: Link; metadataApplied: boolean }
   | { ok: false; error: string; duplicate?: true; existingLink?: Link };
 
+/**
+ * Resolves the authenticated user from the session, then delegates to
+ * `createLinkForUser` (`lib/services/link-service.ts`) — the one
+ * authoritative implementation of "save a link," also used by the Chrome
+ * extension's API route (`app/api/extension/links/route.ts`). This wrapper
+ * exists only to adapt that service's result to `CreateLinkResult`'s shape
+ * (`data` instead of `link`) and to the web app's session-resolution call
+ * shape (`requireUserIdForAction`'s redirect-free `ActionResult` pattern).
+ */
 export async function createLink(
   input: NewLinkInput,
   options: { force?: boolean } = {},
 ): Promise<CreateLinkResult> {
-  if (!isValidUrl(input.url)) {
-    return err("Enter a valid URL, e.g. https://example.com");
-  }
-
   const auth = await requireUserIdForAction();
   if (!auth.ok) return err(auth.error);
 
-  const repo = getLinkRepository().forUser(auth.userId);
-  const normalized = normalizeUrl(input.url) ?? input.url;
-
-  try {
-    if (!options.force) {
-      const existing = await repo.findByUrl(normalized);
-      if (existing) {
-        return {
-          ok: false,
-          error: "You've already saved this link.",
-          duplicate: true,
-          existingLink: existing,
-        };
-      }
-    }
-
-    // Stage 1: the link is saved immediately with whatever the user
-    // provided. Nothing below this line can undo it — a slow or broken
-    // target site affects only whether the link gets enriched, never
-    // whether it gets saved at all.
-    let link = await repo.create(input);
-
-    // Stage 2: best-effort enrichment. Only fields the user left blank are
-    // ever overwritten — checked against the original `input`, not `link`,
-    // since repo.create() has already filled a blank title with a
-    // URL-derived guess by this point. `repo` is still this same user's
-    // scoped repository, so this update can only ever touch the link just
-    // created for them.
-    let metadataApplied = false;
-    try {
-      const metadataResult = await extractMetadata(link.url);
-      if (metadataResult.ok) {
-        metadataApplied = true;
-        const { title, description, imageUrl, faviconUrl } = metadataResult.metadata;
-
-        const patch: LinkUpdate = {};
-        if (!input.title.trim() && title) patch.title = title;
-        if (!input.description?.trim() && description) patch.description = description;
-        if (faviconUrl) patch.favicon = faviconUrl;
-        if (imageUrl) patch.previewImage = imageUrl;
-
-        if (Object.keys(patch).length > 0) {
-          link = (await repo.update(link.id, patch)) ?? link;
-        }
-      }
-    } catch {
-      // extractMetadata is designed to never throw (every internal failure
-      // resolves to { ok: false, reason }), but a save must never be lost to
-      // enrichment regardless — so this catch exists as a second, defensive
-      // guarantee of that, not because a throw is expected in practice.
-    }
-
-    revalidateLinkPaths();
-    if (link.projectId) revalidatePath("/projects");
-
-    return { ok: true, data: link, metadataApplied };
-  } catch (error) {
-    return err(toErrorMessage(error, "Couldn't save this link. Try again."));
-  }
+  const result = await createLinkForUser(auth.userId, input, options);
+  if (!result.ok) return result;
+  return { ok: true, data: result.link, metadataApplied: result.metadataApplied };
 }
 
 export async function updateLink(

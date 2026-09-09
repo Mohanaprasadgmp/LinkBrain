@@ -138,6 +138,20 @@ export function SettingsView({ user }: { user: SessionUser }) {
         </SettingsRow>
       </SettingsSection>
 
+      <SettingsSection
+        title="Browser extension"
+        description="Save the page you're on straight to LinkBrain from Chrome."
+      >
+        <SettingsRow
+          label="Connect the extension"
+          description="Load the extension, then connect it to this account."
+        >
+          <Button variant="secondary" onClick={() => router.push("/extension")}>
+            Connect
+          </Button>
+        </SettingsRow>
+      </SettingsSection>
+
       <SettingsSection title="Account" description="Sessions and sign-out.">
         <SettingsRow label="Signed in as" description={user.email}>
           <Button variant="secondary" onClick={handleSignOut} disabled={isSigningOut}>

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Compiled extension output (see extension/README.md) — generated, not source.
+    "extension/dist/**",
   ]),
 ]);
 

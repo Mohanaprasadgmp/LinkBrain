@@ -43,3 +43,6 @@ next-env.d.ts
 
 # claude code (local-only permission overrides; .claude/settings.json is shared)
 .claude/settings.local.json
+
+# extension build output (see extension/README.md — npm run build:extension)
+/extension/dist/

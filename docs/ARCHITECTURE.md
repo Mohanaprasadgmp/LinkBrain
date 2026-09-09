@@ -456,6 +456,203 @@ route handler in this codebase — still true that a future Chrome extension's
 own routes can be added alongside it without touching anything under
 `(workspace)`.
 
+## Chrome extension (Phase 6)
+
+A Manifest V3 extension (`extension/`, compiled and versioned separately from
+the Next.js app) lets a signed-in user save the page they're on without
+switching to the LinkBrain tab. It is a **thin client**: no business logic,
+no database access, and no second authentication system.
+
+```
+Chrome extension → authenticated HTTPS request → app/api/extension/*
+                                                        ↓
+                                          lib/auth/session.ts (bearer or cookie)
+                                                        ↓
+                                    lib/services/link-service.ts / repository.forUser(userId)
+                                                        ↓
+                                                 Neon Postgres
+```
+
+### Credential representation: Better Auth's `bearer` plugin
+
+`lib/auth.ts` registers `bearer()` (vendored by the installed
+`better-auth@1.7.3`, `better-auth/plugins`) alongside `nextCookies()`. It
+requires no schema and no custom cryptography: on a request carrying
+`Authorization: Bearer <token>`, its `before` hook re-signs that raw token
+and rewrites the request's headers so the rest of Better Auth sees it exactly
+as it would see the matching session cookie. The practical effect —
+`auth.api.getSession({ headers })`, the exact call `lib/auth/session.ts`'s
+`getCurrentUser()` already makes on every page/action, resolves the session
+identically whether `headers` came from a browser cookie or the extension's
+`Authorization` header. **No extension-specific session-resolution code
+exists anywhere** — `app/api/extension/*` routes call the same
+`getCurrentUser()` pages already use. There is no second token system to
+expire or revoke out of step with the web session: it's the same session row.
+
+Rejected alternatives, and why: the extension implementing its own
+email/password or Google OAuth form (forbidden by design — see "Sign-in
+flow" below); `chrome.cookies` reading the session cookie directly (needs the
+broad `cookies` permission, and the cookie is `httpOnly` by Better Auth's own
+default — reading it out from under that is exactly the kind of weakening
+this phase avoids); the OAuth 2.0 Device Authorization Grant
+(`better-auth`'s `device-authorization` plugin, also vendored) — a real fit
+for a device that *can't* open a browser, which doesn't describe a Chrome
+extension that can already call `chrome.tabs.create`; adopting it would add a
+verification-code UI and polling for no security benefit here.
+
+### Sign-in flow: same-browser-tab handoff, not a second login form
+
+1. The popup's "Open LinkBrain" (unauthenticated state) opens
+   `{APP_URL}/extension` in a normal tab — `chrome.tabs.create`, no special
+   permission needed.
+2. That route lives inside `app/(workspace)/`, so it's already gated by
+   `proxy.ts` + `requireUser()` exactly like every other workspace page. An
+   unauthenticated visit lands on `/sign-in?from=/extension` and returns here
+   after a normal, unmodified sign-in (`sign-in-form.tsx`'s existing `?from=`
+   handling — nothing added for this phase).
+3. Once authenticated, `components/extension/connect-panel.tsx` calls the
+   `getExtensionHandoffToken()` Server Action (`lib/actions/extension.ts`).
+   Being a Server Action, it's same-origin and POST-only by construction —
+   not reachable cross-origin, unlike a Route Handler would be. It reads
+   `session.session.token` — Better Auth's own raw session-token field —
+   directly off `auth.api.getSession()`'s result, rather than relying on the
+   `bearer` plugin's `set-auth-token` response header (that header is only
+   re-emitted when a session happens to be due for its periodic cookie
+   refresh, not on every call — not reliable enough for a one-shot handoff).
+4. `ConnectPanel` calls
+   `chrome.runtime.sendMessage(EXTENSION_ID, { type: "linkbrain:connect", token, user })`.
+   This works because `extension/manifest.json` declares
+   `externally_connectable.matches` for the LinkBrain origin — Chrome injects
+   a minimal `sendMessage` binding into matching pages for that one declared
+   extension, with **no permission or install-time warning** (`externally_connectable`
+   is not a `permissions` entry).
+5. `extension/src/background.ts` receives it via `onMessageExternal`, checks
+   `sender.origin` against a small trusted-origin list (defense-in-depth —
+   Chrome already only invokes this listener for a matched page), stores
+   `{ token, user }` in `chrome.storage.local`, and acks.
+
+**Stable, checked-in, non-secret extension id:** `externally_connectable`
+needs the web app to know the extension's id ahead of time, but an unpacked
+extension's id otherwise drifts with its install path. Fixed by pinning one
+RSA public key in `extension/manifest.json`'s `"key"` field (not sensitive —
+it only pins the id; the private key was discarded immediately after
+generation and is never needed for local loading) and computing the
+resulting id with Chrome's own algorithm (SHA-256 of the DER public key,
+first 16 bytes, nibble-mapped to `a`–`p`), hardcoded as
+`src/config/extension.ts`'s `EXTENSION_ID`. Publishing to the Chrome Web
+Store later mints a *different* id — out of scope for this phase (see "Known
+limitations").
+
+**Sign-out is local-only.** The extension's "Sign out" clears
+`chrome.storage.local` and never calls `/api/auth/sign-out`: with no
+multi-session plugin in place, the extension's token *is* the same session
+row as the browser's own cookie session, so a real revocation would also
+sign the user out of the web app. This also means Better Auth's own
+`[...all]` route needed zero CORS/trusted-origin changes for this phase — its
+security boundary is exactly as narrow as it was before Phase 6. A future
+"revoke this device" capability would need the `multi-session` plugin.
+
+### API boundary: one shared service, not a second `createLink`
+
+`lib/actions/links.ts`'s `createLink` used to contain the full "save a
+link" logic (duplicate check → create → best-effort metadata enrichment →
+revalidation) inline. That logic is now `lib/services/link-service.ts`'s
+`createLinkForUser(userId, input, options)` — the one authoritative
+implementation, gaining a small previously-missing set of length caps
+(`LINK_INPUT_LIMITS`) along the way. `createLink` is now a thin wrapper:
+resolve `userId` via `requireUserIdForAction()`, delegate. The extension's
+route does the same, resolving `userId` via `getCurrentUser()` instead.
+Neither goes through the other.
+
+Three routes, all under `app/api/extension/` (already outside `proxy.ts`'s
+matcher, so a bearer-only request is never redirected as if it were a
+signed-out browser visit):
+
+- `POST /api/extension/links` — create a link. Validates the untrusted JSON
+  body (`lib/extension/validate-link-request.ts`: type/enum/length checks
+  against the same `STATUS_ORDER`/`PRIORITY_ORDER`/`isValidUrl` the rest of
+  the app uses — a `userId` field in the body is never read, let alone
+  trusted), rate-limits (`lib/extension/rate-limit.ts`), then calls
+  `createLinkForUser`.
+- `GET /api/extension/projects` — the current user's own projects, via the
+  same `getProjectRepository().forUser(userId)` type-level guarantee every
+  other project list in this app relies on.
+- `GET /api/extension/session` — `{ user }` or 401; lets the popup check
+  "am I still signed in" on open and detect expiry/revocation proactively.
+
+### CORS and origin policy
+
+Scoped to these three routes only (`lib/extension/cors.ts`) —
+`Access-Control-Allow-Origin` is always the exact pinned
+`chrome-extension://<EXTENSION_ID>` origin, never `*`, with `OPTIONS`
+preflight handling for the `Authorization`/`Content-Type` headers the
+extension sends. No other route's CORS behaviour changed; Better Auth's own
+`[...all]` route in particular is untouched (see "Sign-out is local-only"
+above for why that was possible).
+
+### Rate limiting
+
+`lib/extension/rate-limit.ts` is a minimal in-memory sliding-window limiter
+(20 requests/minute per authenticated user id) guarding
+`POST /api/extension/links`. Known limitation, not glossed over: it's
+per-process memory — it resets on redeploy and isn't shared across
+serverless instances/regions, so it bounds an obviously abusive burst from
+one warm instance rather than providing a hard global guarantee. A
+production-grade limiter needs a shared store (Upstash/Redis) — real
+infrastructure, out of scope for this phase.
+
+### Extension storage
+
+`chrome.storage.local`, written only by `extension/src/auth-storage.ts`,
+holds exactly two things: the bearer token and `{id, name, email}` for
+display. No password, no database credential, no Better Auth secret, no
+Google credential — those never leave the server (verified: `grep`-ing
+`extension/` and `extension/dist/` for `DATABASE_URL`/`BETTER_AUTH_SECRET`/
+`GOOGLE_CLIENT_SECRET` finds nothing). Chrome sandboxes storage per-extension;
+nothing here encrypts it further.
+
+### Extension permissions
+
+`storage` (persist the token/user locally) and `activeTab` (read the active
+tab's url/title only when the user opens the popup) — both grant with no
+install-time warning. Nothing else: no `<all_urls>`, no `tabs`, no `cookies`,
+no `history`, no `bookmarks`, no `host_permissions` (an extension page's own
+`fetch()` to `APP_URL` doesn't need them — only a content script's
+cross-origin fetch would).
+
+### Development setup / loading the extension locally
+
+```
+npm run build:extension     # tsc -p extension/tsconfig.json → extension/dist/
+```
+
+Then in Chrome: `chrome://extensions` → enable Developer mode → "Load
+unpacked" → select the `extension/` directory. The toolbar icon opens the
+popup; "Open LinkBrain" on its signed-out state walks through the handoff
+above against `http://localhost:3000` (the `APP_URL` `extension/src/config.ts`
+ships with).
+
+### Production configuration
+
+`extension/src/config.ts`'s `APP_URL` and `extension/manifest.json`'s
+`externally_connectable.matches` both need the deployed LinkBrain origin
+added before packaging for anything but local development — there is no
+build-time env injection (no bundler, by design; see "Why so few
+dependencies"). `app/api/extension/*` reuses `BETTER_AUTH_URL` (already this
+app's own base URL) to build absolute `detailUrl` links in its responses —
+no new server env var needed.
+
+### Known limitations
+
+- Publishing to the Chrome Web Store mints a new extension id; `EXTENSION_ID`,
+  `manifest.json`'s `key`, and `externally_connectable.matches` would all need
+  updating together. Not done in this phase (explicitly out of scope).
+- Extension sign-out is local-only (see above) — no remote "revoke this
+  device" without the `multi-session` plugin.
+- Rate limiting is in-memory/per-process (see above).
+- No offline queueing: a save while offline simply fails with a network
+  error, matching the brief's explicit non-goal of offline sync.
+
 ## Why so few dependencies
 
 Beyond the framework: `lucide-react` (icons), `clsx` + `tailwind-merge` (the
@@ -472,3 +669,7 @@ query-building abstraction beyond Drizzle's own relational API, no session
 library beyond Better Auth's own (no need for a separate Iron Session/Jose
 layer), no second state-management library — Server Actions plus
 `useOptimistic`/`useTransition` cover what a reducer used to.
+
+Phase 6 adds exactly one: `@types/chrome` (types only, no runtime code) so
+the extension's own `tsc` build — no bundler — can typecheck against real
+Chrome extension APIs.

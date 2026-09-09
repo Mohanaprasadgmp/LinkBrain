@@ -3,6 +3,7 @@ import "server-only";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
+import { bearer } from "better-auth/plugins";
 
 import { getDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
@@ -42,5 +43,9 @@ export const auth = betterAuth({
           },
         }
       : undefined,
-  plugins: [nextCookies()],
+  // `bearer` lets a non-browser client (the Chrome extension) authenticate
+  // with `Authorization: Bearer <session token>` instead of a cookie — see
+  // `docs/ARCHITECTURE.md`'s "Chrome extension" section for the full handoff
+  // design. `nextCookies()` must stay last (Better Auth's own requirement).
+  plugins: [bearer(), nextCookies()],
 });

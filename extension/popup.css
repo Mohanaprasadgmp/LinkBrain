@@ -1,0 +1,210 @@
+/*
+ * A hand-picked subset of the web app's own design tokens
+ * (`src/app/globals.css`) — same warm-paper/indigo-violet palette, kept as
+ * plain CSS variables here since the popup has no Tailwind build step.
+ */
+:root {
+  --canvas: #fbfaf8;
+  --surface: #ffffff;
+  --surface-sunken: #f3f1ee;
+  --border: #e6e2dc;
+  --ink: #26221d;
+  --ink-muted: #6c6459;
+  --ink-subtle: #948c80;
+  --accent: #5b3df0;
+  --accent-hover: #4c31d6;
+  --accent-contrast: #ffffff;
+  --success: #1f8a4c;
+  --danger: #c23b2c;
+  --warning: #a86a1a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 320px;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 13px/1.45 -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.wordmark {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.user-email {
+  margin-left: auto;
+  color: var(--ink-subtle);
+  font-size: 11px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app {
+  padding: 14px;
+}
+
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/*
+ * `.view`'s own `display: flex` above has the same specificity as the
+ * browser's default `[hidden] { display: none }` rule, so without this,
+ * source order lets `.view` win and `element.hidden = true` stops actually
+ * hiding anything — every section rendered stacked at once. `[hidden]` here
+ * has higher specificity (two selectors vs. one), so it always wins.
+ */
+.view[hidden] {
+  display: none;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0;
+}
+
+.muted {
+  color: var(--ink-muted);
+  margin: 0;
+  font-size: 12px;
+}
+
+.page-preview {
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  border-radius: 8px;
+}
+
+.page-title {
+  margin: 0 0 2px;
+  font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+select,
+textarea {
+  font: inherit;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  resize: vertical;
+}
+
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.btn-secondary {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--ink);
+}
+
+.btn-full {
+  width: 100%;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.advanced-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Same `[hidden]` vs. same-specificity `display: flex` fix as `.view` above. */
+.advanced-fields[hidden] {
+  display: none;
+}
+
+.error-text {
+  color: var(--danger);
+  font-size: 12px;
+  margin: 0;
+}

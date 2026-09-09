@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "LinkBrain",
+  "version": "0.1.0",
+  "description": "Save the page you're on straight to your LinkBrain library.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnadn5w7TCUi+BnnFBtD2fr4HF/ZUncEmkkS869n7nHzL46Aw+gf+1q4Jp0m5dMeNfv138FLTx6gZTKDxHFxXs97dcm6L5gJBtNDnx99wOkmBYTk+ZvFA3I3RkwQHO0Dg71eG2f4+KTTGrQ84GjIYePpG9YmrbtmwEgfjBanMRNqgUK+oqXyIaNhsjfxzJP2Fen2BocuWo8bWf3c6P3PPNiN84dT0fTfgckQtEKkfn5haSPiiD1xAkM7i6qK0ufcXrmBNPjDEz9kfUhEiryufCJOr2j8g/VgQbITEviZtbFFUNhPXg9hrqzf2SiQVDK1tYH4y2EcfGmsI9L1CcBal1wIDAQAB",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Save to LinkBrain",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "permissions": ["storage", "activeTab"],
+  "externally_connectable": {
+    "matches": ["http://localhost:3000/*"]
+  }
+}
