@@ -24,6 +24,6 @@
   },
   "permissions": ["storage", "activeTab"],
   "externally_connectable": {
-    "matches": ["http://localhost:3000/*"]
+    "matches": ["http://localhost:3000/*", "https://link-brain-gamma.vercel.app/*"]
   }
 }

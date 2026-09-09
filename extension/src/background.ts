@@ -20,10 +20,7 @@ import type { ConnectMessage } from "./types.js";
  * already allowed) and means the same build still works against a local
  * dev server if ever needed.
  */
-const TRUSTED_ORIGINS = [
-  "http://localhost:3000",
-  // "https://<your-hosted-domain>", // add once deployed — see README.md
-];
+const TRUSTED_ORIGINS = ["http://localhost:3000", "https://link-brain-gamma.vercel.app"];
 
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   if (!isConnectMessage(message)) return false;

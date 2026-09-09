@@ -7,4 +7,4 @@
  * settings surface minimal (per the Phase 6 brief) means this isn't exposed
  * as an in-popup preference.
  */
-export const APP_URL = "http://localhost:3000";
+export const APP_URL = "https://link-brain-gamma.vercel.app";
