@@ -10,7 +10,13 @@ export function ok<T>(data: T): ActionResult<T> {
   return { ok: true, data };
 }
 
-export function err(error: string): ActionResult<never> {
+/**
+ * Returns just the error branch, not the full `ActionResult<never>` union —
+ * that union's unreachable `{ ok: true; data: never }` member would make this
+ * fail to satisfy any caller (like `createLink`'s `CreateLinkResult`) whose
+ * success branch carries extra required fields beyond `data`.
+ */
+export function err(error: string): { ok: false; error: string } {
   return { ok: false, error };
 }
 

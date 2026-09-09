@@ -8,6 +8,7 @@ import { MobileNav } from "@/components/layout/mobile-nav";
 import { GlobalSearch } from "@/components/search/global-search";
 import { ThemeQuickToggle } from "@/components/theme/theme-quick-toggle";
 import { Button } from "@/components/ui/button";
+import type { SessionUser } from "@/lib/auth/session";
 import type { SidebarCounts } from "@/lib/data";
 
 /**
@@ -19,12 +20,18 @@ import type { SidebarCounts } from "@/lib/data";
  * hooks, which per the Next.js 16 docs requires a `<Suspense>` boundary around
  * any consumer or `next build` fails with a "Missing Suspense boundary" error.
  */
-export function Topbar({ badgeCounts }: { badgeCounts: SidebarCounts }) {
+export function Topbar({
+  badgeCounts,
+  user,
+}: {
+  badgeCounts: SidebarCounts;
+  user: SessionUser;
+}) {
   const [addOpen, setAddOpen] = useState(false);
 
   return (
     <header className="flex items-center gap-3 border-b border-border bg-surface px-4 py-3 sm:px-6">
-      <MobileNav badgeCounts={badgeCounts} />
+      <MobileNav badgeCounts={badgeCounts} user={user} />
 
       <Suspense fallback={<div className="h-9 w-full max-w-sm" />}>
         <GlobalSearch />

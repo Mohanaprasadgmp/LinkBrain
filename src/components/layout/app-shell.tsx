@@ -1,6 +1,7 @@
 import { ProjectsProvider } from "@/components/layout/projects-context";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import type { SessionUser } from "@/lib/auth/session";
 import type { SidebarCounts } from "@/lib/data";
 import type { Project } from "@/lib/domain/types";
 
@@ -20,17 +21,19 @@ export function AppShell({
   children,
   badgeCounts,
   projects,
+  user,
 }: {
   children: React.ReactNode;
   badgeCounts: SidebarCounts;
   projects: Project[];
+  user: SessionUser;
 }) {
   return (
     <ProjectsProvider projects={projects}>
       <div className="flex h-dvh overflow-hidden bg-canvas">
-        <Sidebar badgeCounts={badgeCounts} />
+        <Sidebar badgeCounts={badgeCounts} user={user} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar badgeCounts={badgeCounts} />
+          <Topbar badgeCounts={badgeCounts} user={user} />
           <main className="flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
               {children}

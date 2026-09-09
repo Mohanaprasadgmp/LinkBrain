@@ -3,7 +3,7 @@
 **Your personal memory for the internet.**
 
 LinkBrain is a personal AI-powered link library: save URLs, organize them into
-projects and tags, keep notes, track what you've read, and eventually ask
+projects, keep notes, track what you've read, and eventually ask
 questions about your own library. This repository is being built
 incrementally, phase by phase.
 
@@ -20,13 +20,12 @@ reasoning behind it.
 
 Everything from Phase 1, now backed by a real database instead of mock data:
 
-- Links, projects, and tags (with a proper many-to-many `tags`/`link_tags`
-  schema — no comma-separated strings) persisted in Postgres.
+- Links and projects persisted in Postgres.
 - Add Link, Edit Link, favorite, status, priority, archive, and delete all
   write through Server Actions and survive a refresh.
-- Dashboard stats, Inbox/Favorites/All Links/Archive, and Projects/Tags pages
+- Dashboard stats, Inbox/Favorites/All Links/Archive, and Projects pages
   all read live from the database via Server Components.
-- Server-side search (title, description, domain, and tags) using Postgres
+- Server-side search (title, description, and domain) using Postgres
   full-text search — no fetching the whole table into the browser to filter.
 - Saving/pending/error states on every mutation (`useTransition`, a
   `useOptimistic` favorite toggle, and inline error messages instead of
@@ -58,12 +57,12 @@ search, background jobs, notifications, and payments.
    npm run db:generate   # only needed again if you change src/lib/db/schema/*
    npm run db:migrate
    ```
-4. **Seed development data** (~18 links, ~5 projects, ~8 tags, matching
+4. **Seed development data** (~18 links, ~5 projects, matching
    Phase 1's fixtures):
    ```bash
    npm run db:seed
    ```
-   This clears and reseeds the links/tags/projects tables every time it
+   This clears and reseeds the links/projects tables every time it
    runs — point it at a scratch database, not anything you care about.
 5. **Run the app.**
    ```bash
@@ -74,7 +73,7 @@ search, background jobs, notifications, and payments.
 ### Running tests
 
 The test suite exercises the real repository layer against Postgres (there's
-no in-memory substitute that faithfully tests tag joins or transactions).
+no in-memory substitute that faithfully tests joins or transactions).
 
 Tests need their own `.env.test.local` (not `.env.local`): Vitest sets
 `NODE_ENV=test`, and Next's own env-loading convention deliberately skips
@@ -88,8 +87,8 @@ cp .env.local .env.test.local
 ```
 
 Every row the tests create is scoped under a `test.linkbrain.internal` /
-`Test Project ` / `test-tag-` marker and removed automatically in `afterAll`,
-so pointing `.env.test.local` at the same database `.env.local` uses is safe.
+`Test Project ` marker and removed automatically in `afterAll`, so pointing
+`.env.test.local` at the same database `.env.local` uses is safe.
 For stronger isolation, point it at a
 [Neon branch](https://neon.tech/docs/introduction/branching) dedicated to
 testing instead, so a test run can never touch real data even if interrupted
@@ -125,5 +124,5 @@ npm test            # run the Vitest suite (needs DATABASE_URL)
 No state-management library (Server Components + Server Actions +
 `useOptimistic`/`useTransition` cover it), no ORM-agnostic abstraction beyond
 the repository interfaces already in `lib/data`, no validation library
-(URL/tag validation reuses the existing pure functions in `lib/utils`) — see
+(URL validation reuses the existing pure functions in `lib/utils`) — see
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for why.

@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -49,6 +50,16 @@ export interface DropdownMenuProps {
   children: ReactNode;
   /** Which edge of the trigger the menu aligns to. */
   align?: "start" | "end";
+  /**
+   * Preferred side of the trigger the menu opens toward. Defaults to below
+   * the trigger. This is only a preference — the menu measures the actual
+   * space available above and below the trigger each time it opens and
+   * flips to the other side when the preferred one doesn't fit, the same
+   * way a native `<select>` does. Pass "top" for a trigger known to sit near
+   * the bottom of the viewport (e.g. the sidebar's account menu), so it
+   * opens upward by default instead of only flipping as a last resort.
+   */
+  side?: "bottom" | "top";
   /** Accessible name for the menu itself. */
   label?: string;
   className?: string;
@@ -58,16 +69,80 @@ export function DropdownMenu({
   trigger,
   children,
   align = "end",
+  side = "bottom",
   label = "Menu",
   className,
 }: DropdownMenuProps) {
   const [open, setOpen] = useState(false);
+  /**
+   * Viewport-relative placement, computed fresh each time the menu opens.
+   * `null` on the first render of an open menu — before layout runs, the menu
+   * is invisible rather than guessing a position, so it never flashes in the
+   * wrong place before the real one is measured.
+   */
+  const [placement, setPlacement] = useState<{
+    top: number;
+    left: number;
+    maxHeight?: number;
+  } | null>(null);
   const menuId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   /** Where to put focus once the menu opens: first item, or last. */
   const pendingFocus = useRef<"first" | "last">("first");
+
+  /**
+   * Position the menu in viewport coordinates (`position: fixed`) rather
+   * than anchoring it with `top-full`/`bottom-full` inside a relatively
+   * positioned trigger wrapper. A trigger near an edge of the screen (the
+   * sidebar's account menu at the bottom, a link row's "..." menu on the
+   * last visible row) doesn't have room on its preferred side, and simply
+   * flipping to the other side isn't enough — a tall menu (this one has a
+   * dozen-plus items) can still overflow the *opposite* edge. So this always
+   * clamps the final position within the viewport, with a small margin, and
+   * only as a last resort (menu taller than the viewport itself) caps its
+   * height and lets it scroll internally.
+   */
+  useLayoutEffect(() => {
+    if (!open) return;
+    const menu = menuRef.current;
+    const trigger = triggerRef.current;
+    if (!menu || !trigger) return;
+
+    const margin = 8;
+    const gap = 6;
+    const menuRect = menu.getBoundingClientRect();
+    const triggerRect = trigger.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const spaceBelow = viewportHeight - triggerRect.bottom - margin;
+    const spaceAbove = triggerRect.top - margin;
+
+    const resolvedSide: "top" | "bottom" =
+      side === "bottom"
+        ? menuRect.height > spaceBelow && spaceAbove > spaceBelow
+          ? "top"
+          : "bottom"
+        : menuRect.height > spaceAbove && spaceBelow > spaceAbove
+          ? "bottom"
+          : "top";
+
+    const availableHeight = resolvedSide === "bottom" ? spaceBelow : spaceAbove;
+    const maxHeight =
+      menuRect.height > availableHeight ? Math.max(availableHeight, 120) : undefined;
+    const menuHeight = maxHeight ?? menuRect.height;
+
+    const rawTop =
+      resolvedSide === "bottom" ? triggerRect.bottom + gap : triggerRect.top - gap - menuHeight;
+    const top = Math.min(Math.max(rawTop, margin), viewportHeight - margin - menuHeight);
+
+    const rawLeft = align === "end" ? triggerRect.right - menuRect.width : triggerRect.left;
+    const left = Math.min(Math.max(rawLeft, margin), viewportWidth - margin - menuRect.width);
+
+    setPlacement({ top, left, maxHeight });
+  }, [open, side, align]);
 
   const getItems = useCallback((): HTMLElement[] => {
     const nodes = menuRef.current?.querySelectorAll<HTMLElement>(
@@ -181,12 +256,21 @@ export function DropdownMenu({
           role="menu"
           aria-label={label}
           onKeyDown={onMenuKeyDown}
+          style={
+            placement
+              ? {
+                  top: placement.top,
+                  left: placement.left,
+                  maxHeight: placement.maxHeight,
+                  overflowY: placement.maxHeight ? "auto" : undefined,
+                }
+              : { top: 0, left: 0, visibility: "hidden" }
+          }
           className={cn(
-            "absolute top-full z-50 mt-1.5 min-w-[11rem] rounded-xl border border-border",
+            "fixed z-50 min-w-[11rem] rounded-xl border border-border",
             "bg-surface p-1 shadow-overlay",
             // A short fade keeps the menu from appearing to teleport.
             "animate-in",
-            align === "end" ? "right-0" : "left-0",
           )}
         >
           <DropdownContext.Provider value={{ close }}>

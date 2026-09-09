@@ -1,41 +1,32 @@
 import "server-only";
 
-import { and, desc, eq, exists, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db";
-import {
-  linkTags as linkTagsTable,
-  links as linksTable,
-  tags as tagsTable,
-} from "@/lib/db/schema";
+import { links as linksTable, projects as projectsTable } from "@/lib/db/schema";
+import { PRIORITY_META, PRIORITY_ORDER } from "@/lib/domain/priority";
+import { UNREAD_STATUSES } from "@/lib/domain/status";
 import type {
+  BulkLinkAction,
+  LibraryStats,
   Link,
   LinkFilter,
+  LinkSort,
   LinkUpdate,
   NewLinkInput,
-  Tag,
 } from "@/lib/domain/types";
-import { slugifyTag } from "@/lib/utils/tags";
 import { extractDomain, normalizeUrl, titleFromUrl } from "@/lib/utils/url";
 
-import type { LinkRepository } from "./repository";
-
-type Transaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+import type { LinkListOptions, LinkRepository, UserScopedLinkRepository } from "./repository";
 
 /**
- * Note on scope: `favicon`/`previewImage` are real database columns (see
- * `lib/db/schema/links.ts`) but deliberately don't appear in the domain
- * `Link` type or anywhere in the UI yet — nothing populates or reads them
- * until the metadata-extraction phase, so surfacing them now would be
- * exactly the "large speculative implementation for future features" this
- * phase is asked to avoid. They stay `null` in every row until then.
- */
-
-/**
- * Maps a database row (with its joined tags) to the domain `Link` type.
+ * Maps a database row to the domain `Link` type.
  *
  * The only place a raw Drizzle row becomes a `Link` — nothing outside
- * `lib/data` ever sees the DB's column names or nested join shape.
+ * `lib/data` ever sees the DB's column names.
+ * (`userId` is deliberately not part of the domain `Link` type — ownership is
+ * an access-control fact enforced by the query that produced the row, not
+ * data the rest of the app needs to carry around.)
  */
 function rowToLink(row: {
   id: string;
@@ -43,6 +34,8 @@ function rowToLink(row: {
   title: string;
   description: string;
   domain: string;
+  favicon: string | null;
+  previewImage: string | null;
   personalNote: string;
   status: string;
   priority: string;
@@ -50,7 +43,6 @@ function rowToLink(row: {
   projectId: string | null;
   createdAt: Date;
   updatedAt: Date;
-  linkTags?: { tag: { name: string } }[];
 }): Link {
   return {
     id: row.id,
@@ -59,38 +51,66 @@ function rowToLink(row: {
     title: row.title,
     description: row.description,
     note: row.personalNote,
-    tags: (row.linkTags ?? []).map((lt) => lt.tag.name),
     status: row.status as Link["status"],
     priority: row.priority as Link["priority"],
     isFavorite: row.isFavorite,
     projectId: row.projectId,
+    favicon: row.favicon,
+    previewImage: row.previewImage,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
 
-const LINK_WITH_TAGS_QUERY = {
-  with: { linkTags: { with: { tag: true } } },
-} as const;
-
 export class DrizzleLinkRepository implements LinkRepository {
-  async list(filter: LinkFilter = {}): Promise<Link[]> {
+  forUser(userId: string): UserScopedLinkRepository {
+    return new UserScopedDrizzleLinkRepository(userId);
+  }
+}
+
+/**
+ * Every query below is scoped to `userId` — see `repository.ts`'s doc
+ * comment on why this is a class per user rather than a `userId` parameter
+ * threaded through each call. `update`/`delete`/`bulkApply` fold `userId`
+ * into the same `WHERE` as the target id(s), so a foreign id matches zero
+ * rows instead of needing a separate "is this mine?" check and a
+ * cross-user-access error path that could leak whether the id exists at all.
+ */
+class UserScopedDrizzleLinkRepository implements UserScopedLinkRepository {
+  constructor(private readonly userId: string) {}
+
+  async list(filter: LinkFilter = {}, options: LinkListOptions = {}): Promise<Link[]> {
     const db = getDb();
-    const where = buildWhere(filter);
+    const where = buildWhere(this.userId, filter);
 
     const rows = await db.query.links.findMany({
       where,
-      orderBy: [desc(linksTable.createdAt)],
-      ...LINK_WITH_TAGS_QUERY,
+      orderBy: buildOrderBy(options.sort ?? "newest"),
+      limit: options.limit,
+      offset: options.offset,
     });
 
     return rows.map(rowToLink);
   }
 
+  async count(filter: LinkFilter = {}): Promise<number> {
+    const [row] = await getDb()
+      .select({ count: sql<number>`count(*)::int` })
+      .from(linksTable)
+      .where(buildWhere(this.userId, filter));
+    return row?.count ?? 0;
+  }
+
   async get(id: string): Promise<Link | null> {
     const row = await getDb().query.links.findFirst({
-      where: eq(linksTable.id, id),
-      ...LINK_WITH_TAGS_QUERY,
+      where: and(eq(linksTable.id, id), eq(linksTable.userId, this.userId)),
+    });
+    return row ? rowToLink(row) : null;
+  }
+
+  async findByUrl(url: string): Promise<Link | null> {
+    const row = await getDb().query.links.findFirst({
+      where: and(eq(linksTable.url, url), eq(linksTable.userId, this.userId)),
     });
     return row ? rowToLink(row) : null;
   }
@@ -98,32 +118,36 @@ export class DrizzleLinkRepository implements LinkRepository {
   async create(input: NewLinkInput): Promise<Link> {
     const url = normalizeUrl(input.url) ?? input.url;
     const status = input.status ?? "saved";
+    const userId = this.userId;
+    // Silently dropped (falls back to unfiled) if `input.projectId` doesn't
+    // belong to this user — never trusted as-is, the same "not found and not
+    // yours look identical" principle as every other cross-user case in this
+    // file. Resolved before the transaction starts since it's a plain read
+    // with no need to be part of the same atomic write.
+    const projectId = await resolveOwnedProjectId(userId, input.projectId);
 
-    const id = await getDb().transaction(async (tx) => {
-      const [inserted] = await tx
-        .insert(linksTable)
-        .values({
-          url,
-          domain: extractDomain(url),
-          title: input.title.trim() || titleFromUrl(url),
-          description: input.description?.trim() ?? "",
-          personalNote: input.note?.trim() ?? "",
-          status,
-          priority: input.priority ?? "useful",
-          isFavorite: input.isFavorite ?? false,
-          projectId: input.projectId ?? null,
-          archivedAt: status === "archived" ? new Date() : null,
-        })
-        .returning({ id: linksTable.id });
+    const [inserted] = await getDb()
+      .insert(linksTable)
+      .values({
+        url,
+        domain: extractDomain(url),
+        title: input.title.trim() || titleFromUrl(url),
+        description: input.description?.trim() ?? "",
+        personalNote: input.note?.trim() ?? "",
+        status,
+        priority: input.priority ?? "useful",
+        isFavorite: input.isFavorite ?? false,
+        projectId,
+        // Always the authenticated user this scoped repository was built
+        // for — nothing in `input` can set or override it.
+        userId,
+        // The database's own clock, not the app server's `new Date()` — see
+        // `update()`'s identical choice below for why the two must agree.
+        archivedAt: status === "archived" ? sql`now()` : null,
+      })
+      .returning({ id: linksTable.id });
 
-      if (input.tags?.length) {
-        await replaceLinkTags(tx, inserted.id, input.tags);
-      }
-
-      return inserted.id;
-    });
-
-    const created = await this.get(id);
+    const created = await this.get(inserted.id);
     if (!created) {
       throw new Error("Failed to read back the link that was just created.");
     }
@@ -136,48 +160,180 @@ export class DrizzleLinkRepository implements LinkRepository {
     // explicitly rather than spread, so the rest of the patch stays typed
     // against the table's real column names instead of an `unknown` escape
     // hatch that would hide a future mismatch the same way this one was.
-    const { tags, note, ...rest } = patch;
+    // `projectId` is pulled out too, so a foreign project id can be resolved
+    // against this user's own projects before it ever reaches the `SET`
+    // clause — see `create()`'s identical guard via `resolveOwnedProjectId`.
+    const { note, projectId, ...rest } = patch;
+    const resolvedProjectId =
+      projectId !== undefined ? await resolveOwnedProjectId(this.userId, projectId) : undefined;
 
-    await getDb().transaction(async (tx) => {
-      if (note !== undefined || Object.keys(rest).length > 0) {
-        const values: Partial<typeof linksTable.$inferInsert> = {
-          ...rest,
-          updatedAt: new Date(),
-        };
-        if (note !== undefined) values.personalNote = note;
-
+    // `updatedAt`/`archivedAt` are stamped with the database's own clock
+    // (`sql`now()``) rather than the app server's `new Date()` — mixing
+    // the two is what let `createdAt` (always DB-clock, via `defaultNow()`)
+    // and `updatedAt` disagree on ordering whenever the app server's clock
+    // drifted from the database's, even by a fraction of a second (caught by
+    // the "recently updated" sort test).
+    const updated = await getDb()
+      .update(linksTable)
+      .set({
+        ...rest,
+        ...(note !== undefined ? { personalNote: note } : {}),
+        ...(resolvedProjectId !== undefined ? { projectId: resolvedProjectId } : {}),
         // Keep archivedAt consistent with status in one place, regardless of
         // which call site changed it (the dedicated archive action or a
         // direct status-menu selection).
-        if (patch.status === "archived") {
-          values.archivedAt = new Date();
-        } else if (patch.status !== undefined) {
-          values.archivedAt = null;
-        }
+        ...(patch.status === "archived"
+          ? { archivedAt: sql`now()` }
+          : patch.status !== undefined
+            ? { archivedAt: null }
+            : {}),
+        updatedAt: sql`now()`,
+      })
+      .where(and(eq(linksTable.id, id), eq(linksTable.userId, this.userId)))
+      .returning({ id: linksTable.id });
 
-        await tx.update(linksTable).set(values).where(eq(linksTable.id, id));
-      }
-
-      if (tags !== undefined) {
-        await replaceLinkTags(tx, id, tags);
-      }
-    });
-
+    if (updated.length === 0) return null;
     return this.get(id);
   }
 
   async delete(id: string): Promise<boolean> {
     const deleted = await getDb()
       .delete(linksTable)
-      .where(eq(linksTable.id, id))
+      .where(and(eq(linksTable.id, id), eq(linksTable.userId, this.userId)))
       .returning({ id: linksTable.id });
     return deleted.length > 0;
   }
+
+  /**
+   * Apply one bulk action across many ids in a single statement rather than
+   * looping per-link — the point of a bulk operation is exactly to avoid N
+   * round trips for N selected links. Every branch scopes by `userId` as
+   * well as `ids`, so an id belonging to another user mixed into the
+   * selection is silently dropped, not acted on.
+   */
+  async bulkApply(ids: string[], action: BulkLinkAction): Promise<number> {
+    if (ids.length === 0) return 0;
+    const db = getDb();
+    const userId = this.userId;
+    const ownedIdsCondition = and(inArray(linksTable.id, ids), eq(linksTable.userId, userId));
+
+    switch (action.type) {
+      case "status": {
+        const rows = await db
+          .update(linksTable)
+          .set({
+            status: action.status,
+            archivedAt: action.status === "archived" ? sql`now()` : null,
+            updatedAt: sql`now()`,
+          })
+          .where(ownedIdsCondition)
+          .returning({ id: linksTable.id });
+        return rows.length;
+      }
+      case "archive": {
+        const rows = await db
+          .update(linksTable)
+          .set({ status: "archived", archivedAt: sql`now()`, updatedAt: sql`now()` })
+          .where(ownedIdsCondition)
+          .returning({ id: linksTable.id });
+        return rows.length;
+      }
+      case "priority": {
+        const rows = await db
+          .update(linksTable)
+          .set({ priority: action.priority, updatedAt: sql`now()` })
+          .where(ownedIdsCondition)
+          .returning({ id: linksTable.id });
+        return rows.length;
+      }
+      case "project": {
+        // Silently resolved to unfiled if `action.projectId` isn't owned by
+        // this user — see `create()`'s identical guard.
+        const resolvedProjectId = await resolveOwnedProjectId(userId, action.projectId);
+        const rows = await db
+          .update(linksTable)
+          .set({ projectId: resolvedProjectId, updatedAt: sql`now()` })
+          .where(ownedIdsCondition)
+          .returning({ id: linksTable.id });
+        return rows.length;
+      }
+      case "favorite": {
+        const rows = await db
+          .update(linksTable)
+          .set({ isFavorite: action.value, updatedAt: sql`now()` })
+          .where(ownedIdsCondition)
+          .returning({ id: linksTable.id });
+        return rows.length;
+      }
+      case "delete": {
+        const rows = await db.delete(linksTable).where(ownedIdsCondition).returning({ id: linksTable.id });
+        return rows.length;
+      }
+      default: {
+        const exhaustive: never = action;
+        throw new Error(`Unhandled bulk action: ${JSON.stringify(exhaustive)}`);
+      }
+    }
+  }
 }
 
-/** Translate a `LinkFilter` into a Drizzle `where` condition, or `undefined` for no filter. */
-function buildWhere(filter: LinkFilter) {
-  const conditions = [];
+/**
+ * Translate a `LinkSort` into a Drizzle `orderBy` clause.
+ *
+ * `priority` sorts by `PRIORITY_META[...].weight` (the same ordering
+ * `sortLinks()` uses for the in-memory/mock path) via a `CASE` expression,
+ * since the column itself is just the enum's text value — tied entries fall
+ * back to newest first, exactly like `sortLinks`.
+ */
+function buildOrderBy(sort: LinkSort) {
+  switch (sort) {
+    case "oldest":
+      return [asc(linksTable.createdAt)];
+    case "recently-updated":
+      return [desc(linksTable.updatedAt)];
+    case "title":
+      return [asc(sql`lower(${linksTable.title})`)];
+    case "title-desc":
+      return [desc(sql`lower(${linksTable.title})`)];
+    case "priority":
+      return [asc(priorityWeightExpr()), desc(linksTable.createdAt)];
+    case "newest":
+    default:
+      return [desc(linksTable.createdAt)];
+  }
+}
+
+function priorityWeightExpr() {
+  const whenClauses = PRIORITY_ORDER.map(
+    (priority) => sql`when ${priority} then ${PRIORITY_META[priority].weight}`,
+  );
+  return sql`case ${linksTable.priority} ${sql.join(whenClauses, sql` `)} end`;
+}
+
+/**
+ * Resolves a project id to itself only if it belongs to `userId`, `null`
+ * otherwise (including when `projectId` itself is `null`/`undefined`) — the
+ * one place `create`/`update`/`bulkApply`'s "project" action all go through,
+ * so a client can never assign a link to another user's project by passing
+ * its id directly, even though nothing about a bare UUID reveals whose
+ * project it is.
+ */
+async function resolveOwnedProjectId(
+  userId: string,
+  projectId: string | null | undefined,
+): Promise<string | null> {
+  if (!projectId) return null;
+  const [row] = await getDb()
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/** Translate a `LinkFilter` into a Drizzle `where` condition, always scoped to `userId`. */
+function buildWhere(userId: string, filter: LinkFilter) {
+  const conditions = [eq(linksTable.userId, userId)];
 
   if (filter.status?.length) {
     conditions.push(inArray(linksTable.status, filter.status));
@@ -192,110 +348,14 @@ function buildWhere(filter: LinkFilter) {
     conditions.push(eq(linksTable.isFavorite, filter.isFavorite));
   }
 
-  // A link must carry every requested tag — mirrors filterLinks()'s existing
-  // "every required tag present" semantics, one EXISTS check per tag.
-  if (filter.tags?.length) {
-    for (const tagLabel of filter.tags) {
-      const slug = slugifyTag(tagLabel);
-      if (!slug) continue;
-      conditions.push(
-        exists(
-          getDb()
-            .select({ one: sql`1` })
-            .from(linkTagsTable)
-            .innerJoin(tagsTable, eq(linkTagsTable.tagId, tagsTable.id))
-            .where(and(eq(linkTagsTable.linkId, linksTable.id), eq(tagsTable.slug, slug))),
-        ),
-      );
-    }
-  }
-
   const query = filter.query?.trim();
   if (query) {
-    const textMatch = sql`to_tsvector('english', ${linksTable.title} || ' ' || ${linksTable.description} || ' ' || ${linksTable.domain}) @@ plainto_tsquery('english', ${query})`;
-    const tagMatch = inArray(
-      linksTable.id,
-      getDb()
-        .select({ id: linkTagsTable.linkId })
-        .from(linkTagsTable)
-        .innerJoin(tagsTable, eq(linkTagsTable.tagId, tagsTable.id))
-        .where(sql`${tagsTable.name} ILIKE ${"%" + query + "%"}`),
+    conditions.push(
+      sql`to_tsvector('english', ${linksTable.title} || ' ' || ${linksTable.description} || ' ' || ${linksTable.domain}) @@ plainto_tsquery('english', ${query})`,
     );
-    conditions.push(or(textMatch, tagMatch)!);
   }
 
-  return conditions.length ? and(...conditions) : undefined;
-}
-
-/**
- * Get each tag's id, creating it if it doesn't exist yet.
- *
- * Uniqueness is enforced on `slug` (via the existing `slugifyTag` util, the
- * same normalisation `deriveTags()` used to dedupe in memory), so "AWS" and
- * "aws" resolve to the same row; whichever spelling was inserted first is
- * kept as the display name.
- */
-async function getOrCreateTagId(tx: Transaction, name: string): Promise<string | null> {
-  const slug = slugifyTag(name);
-  if (!slug) return null;
-
-  const [inserted] = await tx
-    .insert(tagsTable)
-    .values({ name, slug })
-    .onConflictDoNothing({ target: tagsTable.slug })
-    .returning({ id: tagsTable.id });
-  if (inserted) return inserted.id;
-
-  const [existing] = await tx
-    .select({ id: tagsTable.id })
-    .from(tagsTable)
-    .where(eq(tagsTable.slug, slug))
-    .limit(1);
-  return existing?.id ?? null;
-}
-
-/**
- * Replace a link's tag assignments with exactly the given set.
- *
- * Delete-then-insert rather than diffing the existing set: simpler, still
- * correct, and safe from partial results because it always runs inside the
- * caller's transaction — a failure partway through rolls back to the
- * link's previous tag set instead of leaving it half-updated.
- */
-async function replaceLinkTags(tx: Transaction, linkId: string, tagNames: string[]): Promise<void> {
-  await tx.delete(linkTagsTable).where(eq(linkTagsTable.linkId, linkId));
-
-  const seenSlugs = new Set<string>();
-  for (const name of tagNames) {
-    const slug = slugifyTag(name);
-    if (!slug || seenSlugs.has(slug)) continue;
-    seenSlugs.add(slug);
-
-    const tagId = await getOrCreateTagId(tx, name);
-    if (!tagId) continue;
-    await tx.insert(linkTagsTable).values({ linkId, tagId }).onConflictDoNothing();
-  }
-}
-
-/**
- * Tag list with per-tag link counts, replacing the old fixture-era
- * `deriveTags()` (which scanned an in-memory array — there is no such array
- * to scan once links live in Postgres). A single GROUP BY query instead of
- * loading every link just to count tags on it.
- */
-export async function listTagsWithCounts(): Promise<Tag[]> {
-  const rows = await getDb()
-    .select({
-      slug: tagsTable.slug,
-      label: tagsTable.name,
-      linkCount: sql<number>`count(${linkTagsTable.linkId})::int`,
-    })
-    .from(tagsTable)
-    .leftJoin(linkTagsTable, eq(linkTagsTable.tagId, tagsTable.id))
-    .groupBy(tagsTable.id)
-    .orderBy(desc(sql`count(${linkTagsTable.linkId})`), tagsTable.name);
-
-  return rows.filter((row) => row.linkCount > 0);
+  return and(...conditions);
 }
 
 export interface ProjectLinkStats {
@@ -304,14 +364,15 @@ export interface ProjectLinkStats {
 }
 
 /**
- * Per-project link count and most-recent update, keyed by project id.
+ * Per-project link count and most-recent update, keyed by project id, scoped
+ * to one user.
  *
  * A single GROUP BY over `links` rather than fetching every link just to
  * fold over it in memory (the old `countLinksByProject`/`lastActivityByProject`
  * pure functions did that, which was fine scanning a 20-row fixture array —
  * it isn't once links live in Postgres at real scale).
  */
-export async function getProjectLinkStats(): Promise<Record<string, ProjectLinkStats>> {
+export async function getProjectLinkStats(userId: string): Promise<Record<string, ProjectLinkStats>> {
   const rows = await getDb()
     .select({
       projectId: linksTable.projectId,
@@ -319,7 +380,7 @@ export async function getProjectLinkStats(): Promise<Record<string, ProjectLinkS
       lastActivity: sql<string>`max(${linksTable.updatedAt})`,
     })
     .from(linksTable)
-    .where(sql`${linksTable.projectId} is not null`)
+    .where(and(eq(linksTable.userId, userId), sql`${linksTable.projectId} is not null`))
     .groupBy(linksTable.projectId);
 
   const stats: Record<string, ProjectLinkStats> = {};
@@ -339,7 +400,7 @@ export interface SidebarCounts {
 }
 
 /**
- * Counts for the sidebar's Inbox/Favorites badges.
+ * Counts for the sidebar's Inbox/Favorites badges, scoped to one user.
  *
  * Preserves Phase 1's exact (if slightly quirky) definitions rather than
  * "fixing" them here: the Inbox badge counts only `status = 'saved'`, not
@@ -347,22 +408,66 @@ export interface SidebarCounts {
  * already existed in the fixture-backed version and changing it is outside
  * this phase's scope.
  */
-export async function getSidebarCounts(): Promise<SidebarCounts> {
+export async function getSidebarCounts(userId: string): Promise<SidebarCounts> {
   const db = getDb();
 
   const [[savedRow], [favoriteRow]] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(linksTable)
-      .where(eq(linksTable.status, "saved")),
+      .where(and(eq(linksTable.userId, userId), eq(linksTable.status, "saved"))),
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(linksTable)
-      .where(eq(linksTable.isFavorite, true)),
+      .where(and(eq(linksTable.userId, userId), eq(linksTable.isFavorite, true))),
   ]);
 
   return {
     inbox: savedRow?.count ?? 0,
     favorites: favoriteRow?.count ?? 0,
+  };
+}
+
+/**
+ * Dashboard summary counts for one user, computed as SQL aggregates rather
+ * than by fetching every link/project and folding over them in JS (the old
+ * `deriveStats` pure function this replaces, since removed along with its
+ * only caller). Totals and favorites exclude archived links; unread never
+ * includes them in the first place since `UNREAD_STATUSES` doesn't contain
+ * `"archived"`.
+ */
+export async function getLibraryStats(userId: string): Promise<LibraryStats> {
+  const db = getDb();
+
+  const [[totalRow], [unreadRow], [favoriteRow], [projectRow]] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(linksTable)
+      .where(and(eq(linksTable.userId, userId), sql`${linksTable.status} != 'archived'`)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(linksTable)
+      .where(and(eq(linksTable.userId, userId), inArray(linksTable.status, UNREAD_STATUSES))),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(linksTable)
+      .where(
+        and(
+          eq(linksTable.userId, userId),
+          eq(linksTable.isFavorite, true),
+          sql`${linksTable.status} != 'archived'`,
+        ),
+      ),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(projectsTable)
+      .where(eq(projectsTable.userId, userId)),
+  ]);
+
+  return {
+    totalLinks: totalRow?.count ?? 0,
+    unread: unreadRow?.count ?? 0,
+    favorites: favoriteRow?.count ?? 0,
+    projects: projectRow?.count ?? 0,
   };
 }

@@ -8,5 +8,5 @@ export const SITE = {
   name: "LinkBrain",
   tagline: "Your personal memory for the internet.",
   description:
-    "A personal link library: save URLs, organise them into projects and tags, keep notes, and find them again.",
+    "A personal link library: save URLs, organise them into projects, keep notes, and find them again.",
 } as const;

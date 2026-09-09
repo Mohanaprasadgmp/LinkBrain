@@ -31,12 +31,20 @@ export interface Link {
   description: string;
   /** Free-form personal note. Empty string when the user has not written one. */
   note: string;
-  tags: string[];
   status: LinkStatus;
   priority: Priority;
   isFavorite: boolean;
   /** Id of the owning project, or `null` when the link is unfiled. */
   projectId: string | null;
+  /**
+   * Absolute URL of the site's favicon, or `null` if none was found (or
+   * extraction hasn't run/succeeded yet). Never user-entered — populated by
+   * automatic metadata extraction (see `lib/metadata`). The UI falls back to
+   * a generated initial tile when this is `null` or fails to load.
+   */
+  favicon: string | null;
+  /** Absolute URL of the page's preview image (og:image/twitter:image), or `null`. */
+  previewImage: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,30 +62,6 @@ export interface Project {
 
 export type ProjectAccent = "violet" | "amber" | "teal" | "rose" | "slate";
 
-/**
- * A tag as presented to the UI.
- *
- * Tags are stored on links as plain strings, so this record is derived rather
- * than persisted. Deriving it keeps tag counts correct for free whenever links
- * change, instead of requiring a denormalised counter to be kept in sync.
- */
-export interface Tag {
-  /** Lowercase, url-safe identifier, e.g. `dynamodb`. */
-  slug: string;
-  /** Display form, e.g. `DynamoDB`. */
-  label: string;
-  linkCount: number;
-}
-
-/** The signed-in person. A placeholder until authentication exists. */
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  /** Initials shown in the avatar while there is no uploaded image. */
-  initials: string;
-}
-
 /** Aggregate counts shown on the dashboard summary cards. */
 export interface LibraryStats {
   totalLinks: number;
@@ -94,11 +78,10 @@ export interface LibraryStats {
  * read from URL search params today and passed to a database query later.
  */
 export interface LinkFilter {
-  /** Free-text query matched against title, domain, description and tags. */
+  /** Free-text query matched against title, domain and description. */
   query?: string;
   status?: LinkStatus[];
   priority?: Priority[];
-  tags?: string[];
   projectId?: string;
   isFavorite?: boolean;
 }
@@ -108,6 +91,7 @@ export type LinkSort =
   | "oldest"
   | "recently-updated"
   | "title"
+  | "title-desc"
   | "priority";
 
 /** Fields the user may supply when saving a new link. */
@@ -116,25 +100,45 @@ export interface NewLinkInput {
   title: string;
   description?: string;
   note?: string;
-  tags?: string[];
   status?: LinkStatus;
   priority?: Priority;
   projectId?: string | null;
   isFavorite?: boolean;
 }
 
-/** Fields the user may change on an existing link. */
+/**
+ * Fields that may be changed on an existing link — by the user (title,
+ * description, note, status, priority, projectId, isFavorite, url) or
+ * by metadata extraction (favicon, previewImage; see `lib/actions/links.ts`'s
+ * `createLink`, the only place that writes these two).
+ */
 export type LinkUpdate = Partial<
   Pick<
     Link,
     | "title"
     | "description"
     | "note"
-    | "tags"
     | "status"
     | "priority"
     | "projectId"
     | "isFavorite"
     | "url"
+    | "favicon"
+    | "previewImage"
   >
 >;
+
+/**
+ * One bulk operation applied to a set of link ids at once (see
+ * `bulkUpdateLinks` in `lib/actions/links.ts`).
+ *
+ * A discriminated union rather than a single generic patch object, so each
+ * variant maps to exactly one repository method.
+ */
+export type BulkLinkAction =
+  | { type: "status"; status: LinkStatus }
+  | { type: "priority"; priority: Priority }
+  | { type: "project"; projectId: string | null }
+  | { type: "favorite"; value: boolean }
+  | { type: "archive" }
+  | { type: "delete" };

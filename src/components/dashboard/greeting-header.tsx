@@ -2,7 +2,6 @@
 
 import { useSyncExternalStore } from "react";
 
-import { CURRENT_USER } from "@/lib/data/fixtures/user";
 import { greetingForHour } from "@/lib/utils/date";
 
 /**
@@ -33,9 +32,9 @@ function getServerSnapshot(): string {
   return "Welcome back";
 }
 
-export function GreetingHeader() {
+export function GreetingHeader({ name }: { name: string }) {
   const greeting = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const firstName = CURRENT_USER.name.split(" ")[0];
+  const firstName = name.split(" ")[0];
 
   return (
     <div>

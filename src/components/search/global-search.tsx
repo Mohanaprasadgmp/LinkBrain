@@ -64,7 +64,7 @@ export function GlobalSearch() {
         value={value}
         onChange={handleChange}
         label="Search all links"
-        placeholder="Search links, tags, domains..."
+        placeholder="Search links, domains..."
       />
     </form>
   );

@@ -3,7 +3,14 @@ import Link from "next/link";
 import { SITE } from "@/config/site";
 import { cn } from "@/lib/utils/cn";
 
-export function Logo({ className }: { className?: string }) {
+export function Logo({
+  className,
+  showWordmark = true,
+}: {
+  className?: string;
+  /** Set false for a collapsed sidebar, where only the mark fits. */
+  showWordmark?: boolean;
+}) {
   return (
     <Link
       href="/"
@@ -18,7 +25,9 @@ export function Logo({ className }: { className?: string }) {
       >
         L
       </span>
-      <span className="text-lg font-bold tracking-tight text-ink">{SITE.name}</span>
+      {showWordmark ? (
+        <span className="text-lg font-bold tracking-tight text-ink">{SITE.name}</span>
+      ) : null}
     </Link>
   );
 }

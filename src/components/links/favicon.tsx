@@ -1,20 +1,52 @@
+"use client";
+
+import Image from "next/image";
+import { useState } from "react";
+
 import { cn } from "@/lib/utils/cn";
 
 /**
- * A generated stand-in for a site favicon.
+ * A site favicon, real if one was extracted, generated otherwise.
  *
- * Phase 1 makes no network requests, so there is no real favicon to fetch.
- * Rendering the domain's first letter on a colour derived from the domain
- * string gives each site a stable, distinguishable mark instead of a single
- * generic globe icon repeated on every card.
+ * `src` is optional and can fail: `onError` flips a local flag rather than
+ * unmounting the image, falling back to exactly the initial-tile look
+ * Phase 1 always used — so a dead or slow-to-extract favicon degrades to
+ * the same appearance a link with no favicon at all has always had, not a
+ * broken-image icon.
+ *
+ * `unoptimized`: favicon URLs come from whatever arbitrary domain the user
+ * saved, which can't be pre-declared in `next.config.ts`'s image allowlist —
+ * this opts that one image out of Next's optimization pipeline rather than
+ * needing an unbounded remote-pattern config or falling back to a bare
+ * `<img>` (which forgoes the built-in lazy-loading and layout-shift
+ * protections `next/image` otherwise gives for free).
  */
 export function Favicon({
   domain,
+  src,
   className,
 }: {
   domain: string;
+  src?: string | null;
   className?: string;
 }) {
+  const [failed, setFailed] = useState(false);
+
+  if (src && !failed) {
+    return (
+      <Image
+        src={src}
+        alt=""
+        aria-hidden="true"
+        width={32}
+        height={32}
+        unoptimized
+        onError={() => setFailed(true)}
+        className={cn("size-8 shrink-0 rounded-md object-cover", className)}
+      />
+    );
+  }
+
   const letter = (domain.replace(/^\d+/, "")[0] ?? "?").toUpperCase();
   const hue = hashToHue(domain);
 

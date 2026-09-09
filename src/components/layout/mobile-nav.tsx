@@ -8,7 +8,8 @@ import { Logo } from "@/components/layout/logo";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { UserMenu } from "@/components/layout/user-menu";
 import { IconButton } from "@/components/ui/button";
-import { PRIMARY_NAV, SECONDARY_NAV } from "@/config/nav";
+import { PRIMARY_NAV } from "@/config/nav";
+import type { SessionUser } from "@/lib/auth/session";
 import type { SidebarCounts } from "@/lib/data";
 
 /**
@@ -18,7 +19,13 @@ import type { SidebarCounts } from "@/lib/data";
  * anchored to an edge rather than centred, and closes automatically on
  * navigation rather than requiring an explicit dismiss action.
  */
-export function MobileNav({ badgeCounts }: { badgeCounts: SidebarCounts }) {
+export function MobileNav({
+  badgeCounts,
+  user,
+}: {
+  badgeCounts: SidebarCounts;
+  user: SessionUser;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -89,14 +96,7 @@ export function MobileNav({ badgeCounts }: { badgeCounts: SidebarCounts }) {
             </div>
 
             <div className="border-t border-border px-3 py-3">
-              <SidebarNav
-                items={SECONDARY_NAV}
-                badgeCounts={badgeCounts}
-                onNavigate={() => setOpen(false)}
-              />
-              <div className="mt-2">
-                <UserMenu />
-              </div>
+              <UserMenu user={user} />
             </div>
           </div>
         </div>

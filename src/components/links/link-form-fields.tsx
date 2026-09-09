@@ -17,7 +17,6 @@ export interface LinkFormValues {
   title: string;
   description: string;
   note: string;
-  tagsInput: string;
   status: LinkStatus;
   priority: Priority;
   projectId: string;
@@ -90,17 +89,6 @@ export function LinkFormFields({
         )}
       </Field>
 
-      <Field label="Tags" hint="Comma-separated, e.g. AWS, DynamoDB">
-        {(fieldProps) => (
-          <Input
-            {...fieldProps}
-            placeholder="AWS, DynamoDB"
-            value={values.tagsInput}
-            onChange={(event) => onChange({ tagsInput: event.target.value })}
-          />
-        )}
-      </Field>
-
       <div className="grid grid-cols-2 gap-3">
         <Field label="Status">
           {(fieldProps) => (
@@ -139,7 +127,10 @@ export function LinkFormFields({
         </Field>
       </div>
 
-      <Field label="Project">
+      <Field
+        label="Project"
+        hint={projects.length === 0 ? "No projects yet — create one from the Projects page." : undefined}
+      >
         {(fieldProps) => (
           <Select
             {...fieldProps}
@@ -164,7 +155,6 @@ export const EMPTY_LINK_FORM_VALUES: LinkFormValues = {
   title: "",
   description: "",
   note: "",
-  tagsInput: "",
   status: "saved",
   priority: "useful",
   projectId: "",

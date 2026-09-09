@@ -20,9 +20,9 @@ export function getProjectRepository(): ProjectRepository {
 }
 
 export {
+  getLibraryStats,
   getProjectLinkStats,
   getSidebarCounts,
-  listTagsWithCounts,
   type ProjectLinkStats,
   type SidebarCounts,
 } from "./drizzle-link-repository";

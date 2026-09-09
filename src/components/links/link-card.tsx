@@ -1,6 +1,7 @@
 "use client";
 
 import { Star } from "lucide-react";
+import Image from "next/image";
 import { useOptimistic, useState, useTransition } from "react";
 
 import { Favicon } from "@/components/links/favicon";
@@ -30,13 +31,20 @@ import { formatRelativeDate } from "@/lib/utils/date";
 export function LinkCard({
   link,
   onEdit,
+  selected,
+  onSelectChange,
 }: {
   link: Link;
   onEdit: (link: Link) => void;
+  /** Omit both `selected`/`onSelectChange` to render without a selection checkbox at all. */
+  selected?: boolean;
+  onSelectChange?: (selected: boolean) => void;
 }) {
   const [optimisticFavorite, setOptimisticFavorite] = useOptimistic(link.isFavorite);
   const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const previewImage = previewFailed ? null : link.previewImage;
 
   const handleToggleFavorite = () => {
     setError(null);
@@ -50,6 +58,16 @@ export function LinkCard({
   return (
     <article className="group flex flex-col gap-1 py-4">
       <div className="flex gap-3">
+        {onSelectChange ? (
+          <input
+            type="checkbox"
+            checked={selected ?? false}
+            onChange={(event) => onSelectChange(event.target.checked)}
+            aria-label={`Select ${link.title}`}
+            className="mt-2 size-4 shrink-0 rounded border-border-strong text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+          />
+        ) : null}
+
         <a
           href={link.url}
           target="_blank"
@@ -58,7 +76,7 @@ export function LinkCard({
           aria-hidden="true"
           tabIndex={-1}
         >
-          <Favicon domain={link.domain} className="mt-0.5" />
+          <Favicon domain={link.domain} src={link.favicon} className="mt-0.5" />
         </a>
 
         <div className="min-w-0 flex-1">
@@ -104,19 +122,35 @@ export function LinkCard({
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             <StatusBadge status={link.status} />
             <PriorityBadge priority={link.priority} />
-            {link.tags.map((tag) => (
-              <span
-                key={tag}
-                className="rounded-md bg-surface-sunken px-2 py-0.5 text-xs text-ink-muted"
-              >
-                #{tag}
-              </span>
-            ))}
             <span className="ml-auto text-xs whitespace-nowrap text-ink-subtle">
               {formatRelativeDate(link.createdAt)}
             </span>
           </div>
         </div>
+
+        {previewImage ? (
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden shrink-0 self-start sm:block"
+            aria-hidden="true"
+            tabIndex={-1}
+          >
+            {/* Fixed dimensions so a slow-loading or missing image never
+                shifts the row — it either occupies exactly this box or,
+                via onError, nothing at all. */}
+            <Image
+              src={previewImage}
+              alt=""
+              width={64}
+              height={64}
+              unoptimized
+              onError={() => setPreviewFailed(true)}
+              className="size-16 rounded-lg border border-border object-cover"
+            />
+          </a>
+        ) : null}
       </div>
 
       {error ? <p className="pl-11 text-xs text-danger">{error}</p> : null}

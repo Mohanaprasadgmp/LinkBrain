@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(npm run lint)",
-      "Bash(npx tsc --noEmit)"
+      "Bash(npx tsc --noEmit)",
+      "Bash(git push *)",
+      "Bash(powershell -Command \"Stop-Process -Id 70412 -Force\")",
+      "Bash(npm run *)",
+      "Bash(timeout 40 bash -c 'until curl -sf http://localhost:3000 >/dev/null; do sleep 1; done')",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

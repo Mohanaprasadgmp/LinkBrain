@@ -3,29 +3,22 @@
 import {
   Archive,
   ExternalLink,
+  Info,
   MoreHorizontal,
   Pencil,
   Star,
   Trash2,
 } from "lucide-react";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/button";
-import {
-  archiveLink,
-  deleteLink,
-  toggleFavorite,
-  updateLinkPriority,
-  updateLinkStatus,
-} from "@/lib/actions/links";
-import { PRIORITY_OPTIONS } from "@/lib/domain/priority";
-import { STATUS_OPTIONS } from "@/lib/domain/status";
+import { archiveLink, deleteLink, toggleFavorite } from "@/lib/actions/links";
 import type { Link } from "@/lib/domain/types";
 
 /**
@@ -35,6 +28,9 @@ import type { Link } from "@/lib/domain/types";
  * items disable while pending, rather than getting `useOptimistic` treatment
  * like the favourite star) and reports failures via `onError` so the row can
  * show one shared inline error message regardless of which control caused it.
+ * Delete goes through a confirmation dialog rather than firing immediately —
+ * every other mutation here is easily reversed from the same menu, delete
+ * isn't.
  */
 export function LinkActionsMenu({
   link,
@@ -46,6 +42,7 @@ export function LinkActionsMenu({
   onError: (message: string) => void;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
     startTransition(async () => {
@@ -54,82 +51,80 @@ export function LinkActionsMenu({
     });
   };
 
+  const handleConfirmDelete = () => {
+    startTransition(async () => {
+      const result = await deleteLink(link.id);
+      if (!result.ok) onError(result.error);
+      setConfirmDeleteOpen(false);
+    });
+  };
+
   return (
-    <DropdownMenu
-      label={`Actions for ${link.title}`}
-      trigger={(triggerProps) => (
-        <IconButton {...triggerProps} label="More actions" size="sm">
-          <MoreHorizontal aria-hidden="true" className="size-4" />
-        </IconButton>
-      )}
-    >
-      <DropdownMenuItem
-        icon={<ExternalLink className="size-4" />}
-        onSelect={() => window.open(link.url, "_blank", "noopener,noreferrer")}
+    <>
+      <DropdownMenu
+        label={`Actions for ${link.title}`}
+        trigger={(triggerProps) => (
+          <IconButton {...triggerProps} label="More actions" size="sm">
+            <MoreHorizontal aria-hidden="true" className="size-4" />
+          </IconButton>
+        )}
       >
-        Open link
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        icon={<Star className="size-4" />}
-        disabled={isPending}
-        onSelect={() => run(() => toggleFavorite(link.id))}
-      >
-        {link.isFavorite ? "Remove from favorites" : "Add to favorites"}
-      </DropdownMenuItem>
-
-      <DropdownMenuSeparator />
-
-      <DropdownMenuLabel>Status</DropdownMenuLabel>
-      {STATUS_OPTIONS.map((option) => (
         <DropdownMenuItem
-          key={option.value}
-          selected={link.status === option.value}
-          disabled={isPending}
-          onSelect={() => run(() => updateLinkStatus(link.id, option.value))}
+          icon={<Info className="size-4" />}
+          href={`/links/${link.id}`}
         >
-          {option.label}
+          View details
         </DropdownMenuItem>
-      ))}
-
-      <DropdownMenuSeparator />
-
-      <DropdownMenuLabel>Priority</DropdownMenuLabel>
-      {PRIORITY_OPTIONS.map((option) => (
         <DropdownMenuItem
-          key={option.value}
-          selected={link.priority === option.value}
-          disabled={isPending}
-          onSelect={() => run(() => updateLinkPriority(link.id, option.value))}
+          icon={<ExternalLink className="size-4" />}
+          onSelect={() => window.open(link.url, "_blank", "noopener,noreferrer")}
         >
-          {option.label}
+          Open link
         </DropdownMenuItem>
-      ))}
-
-      <DropdownMenuSeparator />
-
-      <DropdownMenuItem
-        icon={<Pencil className="size-4" />}
-        onSelect={() => onEdit(link)}
-      >
-        Edit
-      </DropdownMenuItem>
-      {link.status !== "archived" ? (
         <DropdownMenuItem
-          icon={<Archive className="size-4" />}
+          icon={<Star className="size-4" />}
           disabled={isPending}
-          onSelect={() => run(() => archiveLink(link.id))}
+          onSelect={() => run(() => toggleFavorite(link.id))}
         >
-          Archive
+          {link.isFavorite ? "Remove from favorites" : "Add to favorites"}
         </DropdownMenuItem>
-      ) : null}
-      <DropdownMenuItem
-        icon={<Trash2 className="size-4" />}
-        destructive
-        disabled={isPending}
-        onSelect={() => run(() => deleteLink(link.id))}
-      >
-        Delete
-      </DropdownMenuItem>
-    </DropdownMenu>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem
+          icon={<Pencil className="size-4" />}
+          onSelect={() => onEdit(link)}
+        >
+          Edit
+        </DropdownMenuItem>
+        {link.status !== "archived" ? (
+          <DropdownMenuItem
+            icon={<Archive className="size-4" />}
+            disabled={isPending}
+            onSelect={() => run(() => archiveLink(link.id))}
+          >
+            Archive
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem
+          icon={<Trash2 className="size-4" />}
+          destructive
+          disabled={isPending}
+          onSelect={() => setConfirmDeleteOpen(true)}
+        >
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenu>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="Delete this link?"
+        description="This action cannot be undone."
+        confirmLabel="Delete"
+        isPending={isPending}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
+    </>
   );
 }

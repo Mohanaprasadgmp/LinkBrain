@@ -19,10 +19,13 @@ export function SidebarNav({
   items,
   badgeCounts,
   onNavigate,
+  collapsed = false,
 }: {
   items: NavItem[];
   badgeCounts: SidebarCounts;
   onNavigate?: () => void;
+  /** Icon-only mode for the collapsed desktop sidebar — label becomes a native tooltip. */
+  collapsed?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -43,8 +46,10 @@ export function SidebarNav({
             href={item.href}
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
+            title={collapsed ? item.label : undefined}
             className={cn(
               "group flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+              collapsed && "justify-center",
               active
                 ? "bg-accent/10 text-accent"
                 : "text-ink-muted hover:bg-surface-hover hover:text-ink",
@@ -57,19 +62,23 @@ export function SidebarNav({
                 active ? "text-accent" : "text-ink-subtle group-hover:text-ink",
               )}
             />
-            <span className="flex-1 truncate">{item.label}</span>
-            {count ? (
-              <span
-                className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums",
-                  active
-                    ? "bg-accent/15 text-accent"
-                    : "bg-surface-sunken text-ink-subtle",
-                )}
-              >
-                {count}
-              </span>
-            ) : null}
+            {collapsed ? null : (
+              <>
+                <span className="flex-1 truncate">{item.label}</span>
+                {count ? (
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums",
+                      active
+                        ? "bg-accent/15 text-accent"
+                        : "bg-surface-sunken text-ink-subtle",
+                    )}
+                  >
+                    {count}
+                  </span>
+                ) : null}
+              </>
+            )}
           </Link>
         );
       })}

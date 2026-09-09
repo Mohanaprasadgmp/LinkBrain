@@ -4,9 +4,7 @@ import {
   Home,
   Inbox,
   Library,
-  Settings,
   Star,
-  Tags,
   type LucideIcon,
 } from "lucide-react";
 
@@ -34,12 +32,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: "/favorites", label: "Favorites", icon: Star, badge: "favorites" },
   { href: "/links", label: "All Links", icon: Library },
   { href: "/projects", label: "Projects", icon: FolderOpen },
-  { href: "/tags", label: "Tags", icon: Tags },
   { href: "/archive", label: "Archive", icon: Archive },
-];
-
-export const SECONDARY_NAV: NavItem[] = [
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 /**

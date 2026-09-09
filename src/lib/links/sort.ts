@@ -11,6 +11,7 @@ export const SORT_OPTIONS: SortOption[] = [
   { value: "oldest", label: "Oldest first" },
   { value: "recently-updated", label: "Recently updated" },
   { value: "title", label: "Title A–Z" },
+  { value: "title-desc", label: "Title Z–A" },
   { value: "priority", label: "Priority" },
 ];
 
@@ -32,6 +33,8 @@ export function sortLinks(links: Link[], sort: LinkSort): Link[] {
       return sorted.sort((a, b) => timestamp(b.updatedAt) - timestamp(a.updatedAt));
     case "title":
       return sorted.sort((a, b) => a.title.localeCompare(b.title));
+    case "title-desc":
+      return sorted.sort((a, b) => b.title.localeCompare(a.title));
     case "priority":
       // Ties within a priority band fall back to newest, so the most urgent
       // and most recent link lands at the top.

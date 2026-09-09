@@ -8,6 +8,34 @@
       "when": 1788856383164,
       "tag": "0000_spotty_frog_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788874194577,
+      "tag": "0001_add_auth_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788874282109,
+      "tag": "0002_add_nullable_owner_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788875956973,
+      "tag": "0003_tighten_owner_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788891773059,
+      "tag": "0004_drop_tags",
+      "breakpoints": true
     }
   ]
 }

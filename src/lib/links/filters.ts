@@ -1,5 +1,4 @@
 import type { Link, LinkFilter } from "@/lib/domain/types";
-import { slugifyTag } from "@/lib/utils/tags";
 import { searchLinks } from "./search";
 
 /**
@@ -20,14 +19,6 @@ export function filterLinks(links: Link[], filter: LinkFilter): Link[] {
   if (filter.priority?.length) {
     const allowed = new Set(filter.priority);
     result = result.filter((link) => allowed.has(link.priority));
-  }
-
-  if (filter.tags?.length) {
-    const required = filter.tags.map(slugifyTag);
-    result = result.filter((link) => {
-      const slugs = new Set(link.tags.map(slugifyTag));
-      return required.every((tag) => slugs.has(tag));
-    });
   }
 
   if (filter.projectId) {
@@ -57,7 +48,6 @@ export function isFilterActive(filter: LinkFilter): boolean {
     filter.query?.trim() ||
       filter.status?.length ||
       filter.priority?.length ||
-      filter.tags?.length ||
       filter.projectId ||
       filter.isFavorite !== undefined,
   );

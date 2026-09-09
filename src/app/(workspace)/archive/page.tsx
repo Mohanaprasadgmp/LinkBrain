@@ -3,16 +3,16 @@ import { Suspense } from "react";
 
 import { ArchiveView } from "@/components/links/archive-view";
 import { LinkCollectionSkeleton } from "@/components/ui/skeleton";
+import { parseLinkListSearchParams } from "@/lib/links/query-state";
 
 export const metadata: Metadata = { title: "Archive" };
 
 export default async function ArchivePage({ searchParams }: PageProps<"/archive">) {
-  const { q } = await searchParams;
-  const query = typeof q === "string" ? q : "";
+  const queryState = parseLinkListSearchParams(await searchParams);
 
   return (
     <Suspense fallback={<LinkCollectionSkeleton />}>
-      <ArchiveView query={query} />
+      <ArchiveView queryState={queryState} />
     </Suspense>
   );
 }

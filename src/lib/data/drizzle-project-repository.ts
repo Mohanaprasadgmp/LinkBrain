@@ -1,13 +1,13 @@
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db";
 import { projects as projectsTable } from "@/lib/db/schema";
 import type { Project } from "@/lib/domain/types";
 import { pickProjectAccent } from "@/lib/utils/project-accent";
 
-import type { ProjectRepository } from "./repository";
+import type { ProjectRepository, UserScopedProjectRepository } from "./repository";
 
 type ProjectRow = typeof projectsTable.$inferSelect;
 
@@ -30,10 +30,20 @@ function rowToProject(row: ProjectRow): Project {
 }
 
 export class DrizzleProjectRepository implements ProjectRepository {
+  forUser(userId: string): UserScopedProjectRepository {
+    return new UserScopedDrizzleProjectRepository(userId);
+  }
+}
+
+/** Every query below is scoped to `userId` — see `repository.ts`'s doc comment on why. */
+class UserScopedDrizzleProjectRepository implements UserScopedProjectRepository {
+  constructor(private readonly userId: string) {}
+
   async list(): Promise<Project[]> {
     const rows = await getDb()
       .select()
       .from(projectsTable)
+      .where(eq(projectsTable.userId, this.userId))
       .orderBy(projectsTable.name);
     return rows.map(rowToProject);
   }
@@ -42,7 +52,7 @@ export class DrizzleProjectRepository implements ProjectRepository {
     const [row] = await getDb()
       .select()
       .from(projectsTable)
-      .where(eq(projectsTable.id, id))
+      .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, this.userId)))
       .limit(1);
     return row ? rowToProject(row) : null;
   }
@@ -50,7 +60,7 @@ export class DrizzleProjectRepository implements ProjectRepository {
   async create(input: { name: string; description?: string }): Promise<Project> {
     const [row] = await getDb()
       .insert(projectsTable)
-      .values({ name: input.name, description: input.description ?? "" })
+      .values({ name: input.name, description: input.description ?? "", userId: this.userId })
       .returning();
     return rowToProject(row);
   }
@@ -59,10 +69,14 @@ export class DrizzleProjectRepository implements ProjectRepository {
     id: string,
     patch: Partial<{ name: string; description: string }>,
   ): Promise<Project | null> {
+    // The database's own clock, not the app server's — see
+    // `DrizzleLinkRepository.update()`'s identical choice for why mixing the
+    // two (`createdAt`'s `defaultNow()` vs. an app-side `new Date()` here)
+    // can silently misorder "recently updated" whenever the two clocks drift.
     const [row] = await getDb()
       .update(projectsTable)
-      .set({ ...patch, updatedAt: new Date() })
-      .where(eq(projectsTable.id, id))
+      .set({ ...patch, updatedAt: sql`now()` })
+      .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, this.userId)))
       .returning();
     return row ? rowToProject(row) : null;
   }
@@ -70,7 +84,7 @@ export class DrizzleProjectRepository implements ProjectRepository {
   async delete(id: string): Promise<boolean> {
     const deleted = await getDb()
       .delete(projectsTable)
-      .where(eq(projectsTable.id, id))
+      .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, this.userId)))
       .returning({ id: projectsTable.id });
     return deleted.length > 0;
   }

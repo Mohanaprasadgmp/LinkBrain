@@ -3,15 +3,17 @@ import type { Link } from "@/lib/domain/types";
 /**
  * Seed links.
  *
- * Phase 1 data only. No URL here is ever fetched: titles, descriptions and
- * domains are written by hand, standing in for the metadata that a later phase
- * will extract server-side.
+ * Phase 1 data only. No URL here is ever fetched by hand-authoring it:
+ * titles, descriptions and domains stand in for what real metadata
+ * extraction (Phase 3+) would produce. `favicon`/`previewImage` are added
+ * uniformly below via `.map()` rather than repeated on all 20 entries, since
+ * none of this hand-written fixture content has a real one to offer.
  *
  * Timestamps are fixed ISO strings rather than values computed from the current
  * clock. That keeps server and client renders byte-identical (no hydration
  * mismatch on relative dates) and keeps the fixture deterministic.
  */
-export const LINK_FIXTURES: Link[] = [
+const RAW_LINK_FIXTURES: Omit<Link, "favicon" | "previewImage">[] = [
   {
     id: "link-dynamodb-guide",
     url: "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/best-practices.html",
@@ -20,7 +22,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Single-table design, partition key selection and the access-pattern-first modelling approach.",
     note: "Read the section on sparse indexes before redesigning the events table.",
-    tags: ["AWS", "DynamoDB", "Databases"],
     status: "reading",
     priority: "must-read",
     isFavorite: true,
@@ -36,7 +37,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Data-fetching library with caching, background refetching and pagination primitives.",
     note: "",
-    tags: ["JavaScript", "Development", "Open Source"],
     status: "saved",
     priority: "useful",
     isFavorite: true,
@@ -52,7 +52,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "A breakdown of contrast, face framing and text hierarchy across 40 high-performing thumbnails.",
     note: "Steal the three-colour rule for the next batch.",
-    tags: ["YouTube", "Design", "Content"],
     status: "saved",
     priority: "useful",
     isFavorite: false,
@@ -68,7 +67,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Measured end-to-end input latency across four decades of machines, and why modern ones lose.",
     note: "",
-    tags: ["Engineering", "Performance"],
     status: "read",
     priority: "reference",
     isFavorite: true,
@@ -84,7 +82,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Six neighbourhood temples away from the tour buses, with the walking route between them.",
     note: "Aim for the northern loop early — gates open at 6am.",
-    tags: ["Travel", "Japan", "Guides"],
     status: "saved",
     priority: "maybe-later",
     isFavorite: false,
@@ -100,7 +97,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Cold start mitigation, dependency trimming, and separating handler logic from business logic.",
     note: "",
-    tags: ["AWS", "Lambda", "Serverless"],
     status: "reading",
     priority: "must-read",
     isFavorite: false,
@@ -116,7 +112,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Why writable streams need to be respected, and what happens to memory when they are not.",
     note: "This finally explained the ingest job blowing up at 2GB.",
-    tags: ["Node.js", "JavaScript", "Performance"],
     status: "read",
     priority: "reference",
     isFavorite: false,
@@ -132,7 +127,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Copy-in component library rather than a dependency; useful as a reference implementation.",
     note: "",
-    tags: ["Development", "Design", "Open Source"],
     status: "saved",
     priority: "maybe-later",
     isFavorite: false,
@@ -148,7 +142,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "The six pillars, with the review questions that turn them into an actual audit.",
     note: "",
-    tags: ["AWS", "Architecture"],
     status: "saved",
     priority: "must-read",
     isFavorite: false,
@@ -164,7 +157,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Mic placement, room treatment on a budget, and a post-processing chain for spoken word.",
     note: "",
-    tags: ["YouTube", "Audio", "Content"],
     status: "read",
     priority: "useful",
     isFavorite: false,
@@ -180,7 +172,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Document checklist, appointment lead times and what the bank statement threshold actually is.",
     note: "Apply 10 weeks out. Insurance must cover the whole stay.",
-    tags: ["Travel", "Admin"],
     status: "reading",
     priority: "must-read",
     isFavorite: true,
@@ -196,7 +187,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Practical visual design tactics for developers: hierarchy, spacing, colour and depth.",
     note: "",
-    tags: ["Design", "Development"],
     status: "read",
     priority: "reference",
     isFavorite: true,
@@ -212,7 +202,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Full-text search inside SQLite, including ranking functions and tokenizer options.",
     note: "Candidate for local-first search if Postgres feels heavy.",
-    tags: ["Databases", "Development"],
     status: "saved",
     priority: "useful",
     isFavorite: false,
@@ -228,7 +217,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Overnight bulk ferment with a same-day bake, plus hydration notes for humid kitchens.",
     note: "",
-    tags: ["Cooking", "Personal"],
     status: "saved",
     priority: "maybe-later",
     isFavorite: false,
@@ -244,7 +232,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Per-request cost model, and the break-even point against provisioned capacity.",
     note: "",
-    tags: ["AWS", "DynamoDB", "Costs"],
     status: "archived",
     priority: "reference",
     isFavorite: false,
@@ -260,7 +247,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Mapping .eslintrc concepts onto eslint.config.js, including plugin and extends handling.",
     note: "",
-    tags: ["JavaScript", "Tooling", "Development"],
     status: "archived",
     priority: "reference",
     isFavorite: false,
@@ -276,7 +262,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "A dense two-day route through the fjord side, the opera roof and the coffee that justifies the price.",
     note: "",
-    tags: ["Travel", "Guides"],
     status: "archived",
     priority: "maybe-later",
     isFavorite: false,
@@ -292,7 +277,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "The CSS-first configuration model, the new engine, and what moved out of JavaScript.",
     note: "Theme tokens now live in @theme — no more config file.",
-    tags: ["Development", "Design", "Tooling"],
     status: "read",
     priority: "useful",
     isFavorite: false,
@@ -308,7 +292,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Measured evidence that a share of cold starts are pre-warmed before the first invocation.",
     note: "",
-    tags: ["AWS", "Lambda", "Performance"],
     status: "saved",
     priority: "useful",
     isFavorite: false,
@@ -324,7 +307,6 @@ export const LINK_FIXTURES: Link[] = [
     description:
       "Blocks, databases and the pagination model — relevant for an eventual import path.",
     note: "",
-    tags: ["Development", "Integrations"],
     status: "saved",
     priority: "maybe-later",
     isFavorite: false,
@@ -333,3 +315,9 @@ export const LINK_FIXTURES: Link[] = [
     updatedAt: "2026-08-21T11:26:00.000Z",
   },
 ];
+
+export const LINK_FIXTURES: Link[] = RAW_LINK_FIXTURES.map((fixture) => ({
+  ...fixture,
+  favicon: null,
+  previewImage: null,
+}));

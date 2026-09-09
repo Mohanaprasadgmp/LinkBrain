@@ -10,12 +10,7 @@ import type { Link } from "@/lib/domain/types";
  */
 
 /** Fields a query is matched against, in the order they are weighted. */
-const SEARCHABLE_FIELDS = [
-  "title",
-  "domain",
-  "description",
-  "tags",
-] as const;
+const SEARCHABLE_FIELDS = ["title", "domain", "description"] as const;
 
 export type SearchableField = (typeof SEARCHABLE_FIELDS)[number];
 
@@ -39,9 +34,9 @@ export function searchLinks(links: Link[], query: string): Link[] {
 /**
  * Score how well a link matches a query, higher being better.
  *
- * Title matches outrank domain, then description, then tags, so that searching
- * "aws" surfaces a link titled "AWS..." above one merely tagged `aws`. Returns
- * 0 when the link does not match at all.
+ * Title matches outrank domain, then description, so that searching "aws"
+ * surfaces a link titled "AWS..." above one that merely mentions it in its
+ * description. Returns 0 when the link does not match at all.
  */
 export function scoreLink(link: Link, query: string): number {
   const terms = tokenize(query);
@@ -51,14 +46,12 @@ export function scoreLink(link: Link, query: string): number {
     title: link.title.toLowerCase(),
     domain: link.domain.toLowerCase(),
     description: link.description.toLowerCase(),
-    tags: link.tags.join(" ").toLowerCase(),
   };
 
   const weights: Record<SearchableField, number> = {
     title: 8,
     domain: 4,
     description: 2,
-    tags: 3,
   };
 
   let score = 0;
@@ -94,7 +87,5 @@ function tokenize(query: string): string[] {
 
 /** Flatten the searchable fields of a link into one lowercase string. */
 function buildHaystack(link: Link): string {
-  return [link.title, link.domain, link.description, link.tags.join(" ")]
-    .join(" ")
-    .toLowerCase();
+  return [link.title, link.domain, link.description].join(" ").toLowerCase();
 }

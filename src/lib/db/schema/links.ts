@@ -11,6 +11,7 @@ import {
 import { PRIORITY_ORDER } from "@/lib/domain/priority";
 import { STATUS_ORDER } from "@/lib/domain/status";
 
+import { user } from "./auth";
 import { projects } from "./projects";
 
 /**
@@ -41,6 +42,9 @@ export const links = pgTable(
     projectId: uuid("project_id").references(() => projects.id, {
       onDelete: "set null",
     }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -62,5 +66,6 @@ export const links = pgTable(
     index("links_domain_idx").on(table.domain),
     index("links_archived_at_idx").on(table.archivedAt),
     index("links_project_id_idx").on(table.projectId),
+    index("links_user_id_idx").on(table.userId),
   ],
 );

@@ -1,29 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 
 import { SettingsRow, SettingsSection } from "@/components/settings/settings-section";
 import { ThemeToggle } from "@/components/settings/theme-toggle";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/ui/panel";
 import { Switch } from "@/components/ui/switch";
-import { CURRENT_USER } from "@/lib/data/fixtures/user";
+import { authClient } from "@/lib/auth-client";
+import type { SessionUser } from "@/lib/auth/session";
+import { initialsFromName } from "@/lib/utils/initials";
 
 /**
  * Preference toggles kept as local component state only.
  *
- * Nothing here is persisted: there is no account or backend yet to persist it
- * to, and re-fetching it from `localStorage` would imply a durability the app
+ * Nothing here is persisted: there is no settings-persistence backend yet,
+ * and re-fetching it from `localStorage` would imply a durability the app
  * doesn't actually have. Theme is the one exception (see `ThemeProvider`),
  * because a toggle that visibly reverts itself on reload is worse than one
  * that is honest about being session-only.
+ *
+ * The Profile/Account sections below are real, though — `user` comes from
+ * the authenticated session (`requireUser()`, resolved by
+ * `app/(workspace)/settings/page.tsx`), not a fixture. There's no edit-profile
+ * flow yet (name/email/avatar are exactly what the sign-up form or Google
+ * provided), per this phase's explicit scope: sign-in/out plus "who am I,"
+ * not a profile-management system.
  */
-export function SettingsView() {
+export function SettingsView({ user }: { user: SessionUser }) {
   const [openInNewTab, setOpenInNewTab] = useState(true);
   const [showFavicons, setShowFavicons] = useState(true);
   const [compactList, setCompactList] = useState(false);
+  const router = useRouter();
+  const [isSigningOut, startSignOut] = useTransition();
+
+  const handleSignOut = () => {
+    startSignOut(async () => {
+      await authClient.signOut();
+      router.push("/sign-in");
+      router.refresh();
+    });
+  };
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -33,28 +52,15 @@ export function SettingsView() {
         description="Manage your profile, appearance and preferences."
       />
 
-      <SettingsSection
-        title="Profile"
-        description="Your account details. Editing is not saved yet — there is no account backend in this phase."
-      >
+      <SettingsSection title="Profile" description="Your account details, from sign-up or Google.">
         <SettingsRow label="Avatar">
-          <Avatar initials={CURRENT_USER.initials} />
+          <Avatar initials={initialsFromName(user.name)} src={user.image} />
         </SettingsRow>
         <SettingsRow label="Name">
-          <Input
-            aria-label="Name"
-            defaultValue={CURRENT_USER.name}
-            className="w-56"
-          />
+          <p className="text-sm text-ink">{user.name}</p>
         </SettingsRow>
-        <SettingsRow label="Email" description="Used to identify your account once sign-in exists.">
-          <Input
-            aria-label="Email"
-            type="email"
-            defaultValue={CURRENT_USER.email}
-            disabled
-            className="w-56"
-          />
+        <SettingsRow label="Email">
+          <p className="text-sm text-ink">{user.email}</p>
         </SettingsRow>
       </SettingsSection>
 
@@ -110,7 +116,7 @@ export function SettingsView() {
       >
         <SettingsRow
           label="Auto-categorize new links"
-          description="Suggest tags and a project when you save a link."
+          description="Suggest a project when you save a link."
         >
           <Switch
             checked={false}
@@ -132,25 +138,10 @@ export function SettingsView() {
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection
-        title="Account"
-        description="Sign-in, sessions and data export."
-        badge="Coming soon"
-      >
-        <SettingsRow
-          label="Authentication"
-          description="Sign in to sync your library across devices."
-        >
-          <Button variant="secondary" disabled>
-            Connect account
-          </Button>
-        </SettingsRow>
-        <SettingsRow
-          label="Delete all data"
-          description="Permanently remove your library."
-        >
-          <Button variant="danger" disabled>
-            Delete
+      <SettingsSection title="Account" description="Sessions and sign-out.">
+        <SettingsRow label="Signed in as" description={user.email}>
+          <Button variant="secondary" onClick={handleSignOut} disabled={isSigningOut}>
+            {isSigningOut ? "Signing out..." : "Sign out"}
           </Button>
         </SettingsRow>
       </SettingsSection>

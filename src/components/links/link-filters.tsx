@@ -2,6 +2,7 @@
 
 import { ListFilter } from "lucide-react";
 
+import { useProjects } from "@/components/layout/projects-context";
 import {
   DropdownMenu,
   DropdownMenuItem,
@@ -13,43 +14,52 @@ import { Select } from "@/components/ui/input";
 import { PRIORITY_OPTIONS } from "@/lib/domain/priority";
 import { STATUS_OPTIONS } from "@/lib/domain/status";
 import type { LinkSort, LinkStatus, Priority } from "@/lib/domain/types";
+import type { LinkListQueryState } from "@/lib/links/query-state";
 import { SORT_OPTIONS } from "@/lib/links/sort";
 import { cn } from "@/lib/utils/cn";
 
 /**
- * The status/priority filter menu and sort control shown above a link list.
+ * The status/priority/project/favorite filter menu and sort control shown
+ * above a link list.
  *
- * Status and priority filters are multi-select (the underlying `LinkFilter`
- * takes arrays), toggled by re-selecting an already-active option, so a page
- * like Archive can still let the user narrow further by priority.
+ * Status and priority are multi-select (the underlying `LinkFilter` takes
+ * arrays), toggled by re-selecting an already-active option. Project and
+ * favorite are single-value. `state` is the parsed URL query state from
+ * `useLinkListQuery`; every `on*` handler here is one of that hook's setters,
+ * passed straight through by the caller.
  */
 export interface LinkFiltersProps {
-  status: LinkStatus[];
-  onStatusChange: (status: LinkStatus[]) => void;
-  priority: Priority[];
-  onPriorityChange: (priority: Priority[]) => void;
-  sort: LinkSort;
+  state: LinkListQueryState;
+  onToggleStatus: (status: LinkStatus) => void;
+  onTogglePriority: (priority: Priority) => void;
+  onProjectChange: (projectId: string | null) => void;
+  onFavoriteChange: (favorite: boolean) => void;
   onSortChange: (sort: LinkSort) => void;
-  /** Hide the status filter on pages that already filter status structurally (e.g. Archive). */
+  onClearAll: () => void;
+  /** Hide a facet on pages that already filter it structurally (e.g. status on Archive, favorite on Favorites). */
   hideStatus?: boolean;
-}
-
-function toggle<T>(list: T[], value: T): T[] {
-  return list.includes(value)
-    ? list.filter((item) => item !== value)
-    : [...list, value];
+  hideProject?: boolean;
+  hideFavorite?: boolean;
 }
 
 export function LinkFilters({
-  status,
-  onStatusChange,
-  priority,
-  onPriorityChange,
-  sort,
+  state,
+  onToggleStatus,
+  onTogglePriority,
+  onProjectChange,
+  onFavoriteChange,
   onSortChange,
+  onClearAll,
   hideStatus = false,
+  hideProject = false,
+  hideFavorite = false,
 }: LinkFiltersProps) {
-  const activeCount = status.length + priority.length;
+  const projects = useProjects();
+  const activeCount =
+    state.status.length +
+    state.priority.length +
+    (hideProject ? 0 : state.projectId ? 1 : 0) +
+    (hideFavorite ? 0 : state.favorite ? 1 : 0);
 
   return (
     <div className="flex items-center gap-2">
@@ -73,8 +83,8 @@ export function LinkFilters({
             {STATUS_OPTIONS.map((option) => (
               <DropdownMenuItem
                 key={option.value}
-                selected={status.includes(option.value)}
-                onSelect={() => onStatusChange(toggle(status, option.value))}
+                selected={state.status.includes(option.value)}
+                onSelect={() => onToggleStatus(option.value)}
               >
                 {option.label}
               </DropdownMenuItem>
@@ -87,31 +97,52 @@ export function LinkFilters({
         {PRIORITY_OPTIONS.map((option) => (
           <DropdownMenuItem
             key={option.value}
-            selected={priority.includes(option.value)}
-            onSelect={() => onPriorityChange(toggle(priority, option.value))}
+            selected={state.priority.includes(option.value)}
+            onSelect={() => onTogglePriority(option.value)}
           >
             {option.label}
           </DropdownMenuItem>
         ))}
 
-        {activeCount > 0 ? (
+        {!hideProject && projects.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Project</DropdownMenuLabel>
+            {projects.map((project) => (
+              <DropdownMenuItem
+                key={project.id}
+                selected={state.projectId === project.id}
+                onSelect={() => onProjectChange(state.projectId === project.id ? null : project.id)}
+              >
+                {project.name}
+              </DropdownMenuItem>
+            ))}
+          </>
+        ) : null}
+
+        {!hideFavorite ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onSelect={() => {
-                onStatusChange([]);
-                onPriorityChange([]);
-              }}
+              selected={state.favorite}
+              onSelect={() => onFavoriteChange(!state.favorite)}
             >
-              Clear filters
+              Favorites only
             </DropdownMenuItem>
+          </>
+        ) : null}
+
+        {activeCount > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onClearAll}>Clear filters</DropdownMenuItem>
           </>
         ) : null}
       </DropdownMenu>
 
       <Select
         aria-label="Sort links"
-        value={sort}
+        value={state.sort}
         onChange={(event) => onSortChange(event.target.value as LinkSort)}
         className={cn("w-auto min-w-[9.5rem]")}
       >

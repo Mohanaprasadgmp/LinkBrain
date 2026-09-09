@@ -8,7 +8,6 @@ import { Dialog } from "@/components/ui/dialog";
 import { LinkFormFields, type LinkFormValues } from "@/components/links/link-form-fields";
 import { updateLink } from "@/lib/actions/links";
 import type { Link } from "@/lib/domain/types";
-import { parseTagInput } from "@/lib/utils/tags";
 
 export interface EditLinkDialogProps {
   link: Link | null;
@@ -21,7 +20,6 @@ function valuesFromLink(link: Link): LinkFormValues {
     title: link.title,
     description: link.description,
     note: link.note,
-    tagsInput: link.tags.join(", "),
     status: link.status,
     priority: link.priority,
     projectId: link.projectId ?? "",
@@ -72,7 +70,6 @@ export function EditLinkDialog({ link, onClose }: EditLinkDialogProps) {
         title: values.title.trim() || link.title,
         description: values.description,
         note: values.note,
-        tags: parseTagInput(values.tagsInput),
         status: values.status,
         priority: values.priority,
         projectId: values.projectId || null,
