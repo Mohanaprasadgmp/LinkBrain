@@ -1,4 +1,5 @@
 import type {
+  AiInsight,
   BulkLinkAction,
   Link,
   LinkFilter,
@@ -84,4 +85,49 @@ export interface UserScopedProjectRepository {
 
 export interface ProjectRepository {
   forUser(userId: string): UserScopedProjectRepository;
+}
+
+export interface AiInsightCompletion {
+  summary: string;
+  category: string;
+  topics: string[];
+  keyPoints: string[];
+  contentType: string;
+  model: string;
+  promptVersion: number;
+}
+
+/**
+ * Deliberately **not** a `forUser(userId)` repository like the two above —
+ * there is no `userId` column on `link_ai_insights` to scope by (see
+ * `lib/db/schema/ai-insights.ts`'s doc comment). Ownership is enforced
+ * exactly once, upstream: every call site resolves the link through
+ * `getLinkRepository().forUser(userId).get(linkId)` first, and only reaches
+ * this repository with a `linkId` already proven to belong to that user
+ * (see `lib/ai/ai-service.ts` and `lib/actions/ai.ts`).
+ */
+export interface AiInsightRepository {
+  getByLinkId(linkId: string): Promise<AiInsight | null>;
+  /** Creates the initial `"pending"` row. Safe to call at most once per link — see call site. */
+  insertPending(linkId: string): Promise<AiInsight>;
+  /**
+   * Atomically claims the *automatic, one-time* attempt: flips `"pending"`
+   * or `"failed"` to `"processing"`, or returns `null` if the row is
+   * already `"processing"` **or already `"completed"`** — the automatic
+   * path must never reprocess a link that already has a valid result (the
+   * brief's "avoid processing a link again if an equivalent successful
+   * result already exists"). A user-triggered regenerate is the only way to
+   * redo a `"completed"` result — see `tryStartRegeneration`.
+   */
+  tryStartProcessing(linkId: string): Promise<AiInsight | null>;
+  /**
+   * Atomically claims a *user-requested* regeneration: flips `"pending"`,
+   * `"failed"`, **or `"completed"`** to `"processing"`, or returns `null`
+   * only if another attempt is already `"processing"` — this is the one
+   * path allowed to deliberately override a completed result.
+   */
+  tryStartRegeneration(linkId: string): Promise<AiInsight | null>;
+  markCompleted(linkId: string, result: AiInsightCompletion): Promise<AiInsight | null>;
+  /** `reason` is always one of the coarse, safe categories — never a raw error message. */
+  markFailed(linkId: string, reason: string): Promise<AiInsight | null>;
 }

@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 
+import { linkAiInsights } from "./ai-insights";
 import { links } from "./links";
 import { projects } from "./projects";
 
@@ -14,8 +15,19 @@ export const linksRelations = relations(links, ({ one }) => ({
     fields: [links.projectId],
     references: [projects.id],
   }),
+  aiInsight: one(linkAiInsights, {
+    fields: [links.id],
+    references: [linkAiInsights.linkId],
+  }),
 }));
 
 export const projectsRelations = relations(projects, ({ many }) => ({
   links: many(links),
+}));
+
+export const linkAiInsightsRelations = relations(linkAiInsights, ({ one }) => ({
+  link: one(links, {
+    fields: [linkAiInsights.linkId],
+    references: [links.id],
+  }),
 }));

@@ -1,8 +1,11 @@
 import "server-only";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
-import { getLinkRepository } from "@/lib/data";
+import { processLinkAi } from "@/lib/ai/ai-service";
+import { isAiConfigured } from "@/lib/ai/openai-client";
+import { getAiInsightRepository, getLinkRepository } from "@/lib/data";
 import type { Link, LinkUpdate, NewLinkInput } from "@/lib/domain/types";
 import { extractMetadata } from "@/lib/metadata";
 import { isValidUrl, normalizeUrl } from "@/lib/utils/url";
@@ -82,10 +85,12 @@ export async function createLinkForUser(
     // scoped repository, so this update can only ever touch the link just
     // created for them.
     let metadataApplied = false;
+    let fetchedHtml: string | null = null;
     try {
       const metadataResult = await extractMetadata(link.url);
       if (metadataResult.ok) {
         metadataApplied = true;
+        fetchedHtml = metadataResult.html;
         const { title, description, imageUrl, faviconUrl } = metadataResult.metadata;
 
         const patch: LinkUpdate = {};
@@ -107,6 +112,29 @@ export async function createLinkForUser(
 
     revalidateLinkPaths();
     if (link.projectId) revalidatePath("/projects");
+
+    // Stage 3: AI enrichment (Phase 7) — entirely optional and never on the
+    // critical path. Skipped outright (no row created at all) when OpenAI
+    // isn't configured, so local dev/CI without an API key never leaves a
+    // permanently-"pending" row behind. When it does run, the actual OpenAI
+    // call happens via `after()` — scheduled here, executed only once the
+    // response for this save has already been sent — so a slow or failing
+    // AI call can never delay or break "the link was saved." See
+    // `docs/ARCHITECTURE.md`'s "AI enrichment" section for the full design.
+    if (isAiConfigured()) {
+      const savedLink = link;
+      const html = fetchedHtml;
+      await getAiInsightRepository().insertPending(savedLink.id);
+      after(() =>
+        processLinkAi(savedLink.id, {
+          url: savedLink.url,
+          title: savedLink.title,
+          description: savedLink.description,
+          domain: savedLink.domain,
+          html,
+        }),
+      );
+    }
 
     return { ok: true, link, metadataApplied };
   } catch (error) {

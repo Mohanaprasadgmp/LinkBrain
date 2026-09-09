@@ -9,12 +9,10 @@ import type { MetadataResult } from "./types";
  * Fetches a URL server-side and extracts a best-effort `PageMetadata`.
  *
  * This is the one function the rest of the app calls; everything else in
- * this module is an implementation detail reached through this seam. A
- * later phase's content-extraction step (feeding the Claude/AI pipeline)
- * can call `fetchPage()` again — or extend this function to return the raw
- * HTML alongside the parsed metadata — without needing to touch the SSRF
- * guard, the parser, or the precedence rules, since those are already
- * separated for exactly that kind of extension.
+ * this module is an implementation detail reached through this seam. The
+ * `ok:true` result's `html` field (Phase 7) is that same fetch's raw body,
+ * reused by `lib/ai/ai-service.ts` for AI content extraction — one
+ * SSRF-checked, size-limited fetch serves both metadata and AI, never two.
  */
 export async function extractMetadata(url: string): Promise<MetadataResult> {
   const pageResult = await fetchPage(url);
@@ -25,7 +23,7 @@ export async function extractMetadata(url: string): Promise<MetadataResult> {
   try {
     const fields = parseHtml(pageResult.html);
     const metadata = applyPrecedence(fields, pageResult.finalUrl);
-    return { ok: true, metadata };
+    return { ok: true, metadata, html: pageResult.html };
   } catch {
     return { ok: false, reason: "parse-error" };
   }

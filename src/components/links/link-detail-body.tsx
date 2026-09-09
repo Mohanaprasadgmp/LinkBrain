@@ -5,13 +5,14 @@ import Image from "next/image";
 import NextLink from "next/link";
 import { useOptimistic, useState, useTransition } from "react";
 
+import { AiInsightsPanel } from "@/components/links/ai-insights-panel";
 import { EditLinkDialog } from "@/components/links/edit-link-dialog";
 import { Favicon } from "@/components/links/favicon";
 import { Button, IconButton } from "@/components/ui/button";
 import { toggleFavorite, updateLinkPriority, updateLinkStatus } from "@/lib/actions/links";
 import { PRIORITY_OPTIONS } from "@/lib/domain/priority";
 import { STATUS_OPTIONS } from "@/lib/domain/status";
-import type { Link as LinkRecord, Project } from "@/lib/domain/types";
+import type { AiInsight, Link as LinkRecord, Project } from "@/lib/domain/types";
 import { cn } from "@/lib/utils/cn";
 import { formatRelativeDate } from "@/lib/utils/date";
 
@@ -29,9 +30,11 @@ import { formatRelativeDate } from "@/lib/utils/date";
 export function LinkDetailBody({
   link,
   project,
+  aiInsight,
 }: {
   link: LinkRecord;
   project: Project | null;
+  aiInsight: AiInsight | null;
 }) {
   const [optimisticFavorite, setOptimisticFavorite] = useOptimistic(link.isFavorite);
   const [isPending, startTransition] = useTransition();
@@ -172,6 +175,8 @@ export function LinkDetailBody({
           </div>
         </section>
       ) : null}
+
+      <AiInsightsPanel linkId={link.id} insight={aiInsight} />
 
       <div className="flex flex-wrap gap-4 border-t border-border pt-4 text-xs text-ink-subtle">
         <span>Saved {formatRelativeDate(link.createdAt)}</span>

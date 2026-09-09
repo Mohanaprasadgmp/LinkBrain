@@ -798,6 +798,236 @@ accounts and credentials this environment doesn't have — every one of those
 is a manual step for the project owner, documented above and in
 `extension/README.md` rather than performed automatically.
 
+## AI enrichment (Phase 7)
+
+After a link is saved, LinkBrain optionally asks OpenAI to analyze it —
+summary, category, topics, key points, content type — and stores the result
+alongside the link. This is a second, independent enrichment stage after
+Phase 3's metadata extraction, not a replacement for it, and it is never on
+the critical path: a link is fully saved and usable the instant
+`repo.create()` returns, whether or not AI ever runs, succeeds, or is even
+configured.
+
+```
+createLinkForUser()                          (critical path — unchanged)
+  → repo.create()
+  → extractMetadata()      → also returns the fetched HTML (reused below)
+  → insert ai_insights row, status "pending"    (fast, synchronous)
+  → after(() => processLinkAi(...))             (scheduled, non-blocking)
+  → return { ok, link, metadataApplied }        (client gets this immediately)
+
+after() callback, later, same invocation:
+  processLinkAi()
+    → skip entirely if OPENAI_API_KEY unset
+    → atomically claim the row ("pending"/"failed" → "processing")
+    → extractPageText(html)   cheerio-based, truncated, own module
+    → openai.responses.create()   structured output, bounded output tokens
+    → validate the parsed result against the same schema, server-side
+    → persist "completed" + fields, or "failed" + a safe reason
+```
+
+### OpenAI SDK and API choice
+
+`openai@7.12.1` (the current stable release at implementation time), using
+the **Responses API** (`client.responses.create`) — confirmed against the
+installed package's own TypeScript types, not assumed from memory:
+`text.format` accepts a raw `{type:"json_schema", name, schema, strict:true}`
+object (`lib/ai/schema.ts`); message `role` supports `"developer"` (see
+"Prompt injection protection" below); `max_output_tokens`,
+`reasoning.effort`, and `response.usage.{input_tokens,output_tokens}` are
+all real, current fields on the installed SDK version. No Zod/validation
+library was added just for this — this app has none (see "Why so few
+dependencies" below) and already hand-validates untrusted input elsewhere
+(`lib/extension/validate-link-request.ts`); `lib/ai/schema.ts`'s
+`validateAiResult` follows that same pattern.
+
+### Model configuration
+
+`OPENAI_MODEL`, defaulting to `gpt-5.6-luna` — OpenAI's cheapest, fastest
+tier in the GPT-5.6 family (confirmed as a real, current model before
+using it), explicitly positioned for cost-sensitive, high-volume workloads,
+which is exactly this use case. Read once, in `lib/ai/openai-client.ts`'s
+`getConfiguredModel()` — never hardcoded anywhere else, so changing models
+later is a one-line env var change, not a code change.
+
+### AI service architecture
+
+`lib/ai/` is the entire provider-specific surface:
+
+- `openai-client.ts` — the one place `OPENAI_API_KEY` is read and the one
+  `OpenAI` client is constructed (`import "server-only"`, lazy + cached,
+  mirroring `lib/db/index.ts`'s `getDb()` pattern exactly). `isAiConfigured()`
+  gates every other entry point.
+- `extract-page-text.ts` — cheerio-based: strips script/style/nav/footer/
+  iframe, collapses whitespace, hard-truncates (6,000 characters) — bounds
+  cost regardless of source page size, independent of the output-side
+  `max_output_tokens` bound.
+- `prompt.ts` — the fixed developer instructions and the untrusted-content
+  delimiter format (see below).
+- `schema.ts` — the JSON schema sent to OpenAI, and `validateAiResult`, the
+  server-side re-validation of whatever comes back. `strict:true` already
+  constrains *shape*; this app never trusts model output for *content*
+  without its own check regardless.
+- `ai-service.ts` — `processLinkAi()`, the only place `responses.create` is
+  called. Both entry points (the automatic trigger in `link-service.ts` and
+  `regenerateAiInsights` in `lib/actions/ai.ts`) call this one function —
+  never a second implementation of the pipeline.
+
+Nothing above the `lib/ai/` boundary knows this is OpenAI specifically — a
+future provider swap touches this directory alone.
+
+### Database: `link_ai_insights`, not columns on `links`
+
+A dedicated table (`lib/db/schema/ai-insights.ts`), one row per link
+(`unique(linkId)`, cascade-deleted with it): `processingStatus` (`pending |
+processing | completed | failed`), `summary`, `category` (plain text, not
+an enum — the taxonomy stays free to evolve), `topics`/`keyPoints`
+(Postgres `text[]`), `contentType`, `model`, `promptVersion`, `errorReason`
+(a coarse, safe category, mirroring `lib/metadata/types.ts`'s
+`MetadataFailureReason` pattern — never a raw error message), timestamps.
+
+**No `userId` column, deliberately.** Ownership is inherited, not
+duplicated: every read/write reaches this table only after the caller has
+already resolved the link through `getLinkRepository().forUser(userId).get(linkId)`
+— the same "not found and not yours look identical" guarantee every other
+table in this app relies on (see "Repository security" above). Confirmed by
+`lib/actions/ai.test.ts`'s cross-user test: requesting AI for another user's
+link never even reaches the AI table.
+
+### Duplicate-processing prevention: two compare-and-swaps, not one
+
+A single "claim processing" method isn't enough, because the automatic path
+and a user-triggered regenerate need *different* rules about what they're
+allowed to override:
+
+- `tryStartProcessing` (automatic path): claims only from `pending`/`failed`.
+  **Never reprocesses a `completed` link** — the brief's "avoid processing a
+  link again if an equivalent successful result already exists."
+- `tryStartRegeneration` (user-triggered): claims from `pending`/`failed`/
+  `completed` — a deliberate click is the only way to override a completed
+  result.
+
+Both refuse to claim a row that's currently `processing`, which is what
+actually prevents two concurrent OpenAI calls for the same link (a race
+between the automatic attempt and a fast "Regenerate" click, or a
+double-click) — proven by a concurrency test in `lib/ai/ai-service.test.ts`
+that fires two simultaneous attempts and asserts the mock was called
+exactly once. `regenerateAiInsights` additionally enforces a 15-second
+cooldown (keyed off the row's own `updatedAt`) independent of the CAS, so
+rapid repeated clicks after a completed/failed result don't each spend an
+API call.
+
+### Prompt injection protection
+
+Webpage content is untrusted — it may contain text engineered to look like
+instructions. Two layers, both in `lib/ai/prompt.ts`:
+
+1. **Role separation.** Fixed instructions are sent as a `developer`-role
+   message; the untrusted title/description/domain/page-text go in a
+   separate `user`-role message. OpenAI's Responses API documents
+   `developer`/`system` messages as taking precedence over `user` content.
+2. **Explicit framing + delimiters.** The developer message tells the model
+   in plain language that the user message is inert data to analyze, never
+   a command, and the untrusted content itself is wrapped in an explicit
+   `%%%LINKBRAIN_UNTRUSTED_WEBPAGE_CONTENT%%%` delimiter the model is told
+   to treat as a hard boundary.
+
+Neither layer is a cryptographic guarantee — no prompt-injection defense is,
+for any provider — so this is paired with output validation regardless of
+what the model was tricked into producing: there are no tools/function
+calls wired into this request at all, so a successful injection can at
+worst corrupt this one link's own AI fields, never escalate to another
+user's data or an action outside this narrow structured-output contract.
+
+### Data sent to OpenAI, and data that is never sent
+
+Sent: the link's `url`, `title`, `description`, `domain`, and truncated page
+body text (from the same fetch `extractMetadata` already performed — see
+below). That's the entire `AiProcessingContext` type
+(`lib/ai/ai-service.ts`) — there is no field for anything else.
+
+**Never sent**: `personalNote` (no field for it, structurally impossible to
+pass through), passwords, session tokens, database credentials, any other
+user's data, or any data beyond what's needed for this one link.
+
+### One fetch serves both metadata and AI
+
+`extractMetadata`'s `ok:true` result now includes the raw `html` it already
+fetched (`lib/metadata/types.ts`) — `lib/ai/extract-page-text.ts` reuses that
+same SSRF-checked, size-limited fetch instead of requesting the URL a second
+time. `regenerateAiInsights` is the one exception: it deliberately re-fetches
+(the page may have changed, or the first fetch may be what failed), which is
+acceptable because it's a rate-limited, user-initiated action, not automatic.
+
+### Execution model on Vercel: `after()`, not a queue
+
+`next/server`'s `after()` (stable since Next 15.1.0, confirmed from this
+version's own bundled docs at `node_modules/next/dist/docs/.../after.md`)
+schedules `processLinkAi` to run after the save response has already been
+sent, within the same function invocation — Vercel wires its `waitUntil`
+primitive into `after()` automatically, so this needed zero new
+infrastructure. Vercel's Fluid Compute (default since April 2025) gives
+serverless functions 300 seconds by default; `app/api/extension/links/route.ts`
+additionally sets `export const maxDuration = 30` explicitly so the AI call
+always has room regardless of platform default. The web app's `createLink`
+Server Action relies on the platform default rather than a per-page
+override, since Server Actions can only override `maxDuration` at the page
+level and `createLink` is invoked from several pages via one shared dialog
+— scattering that override across every page seemed like worse engineering
+than relying on a default that's already generous.
+
+### Failure handling — no automatic retry
+
+Every failure path — OpenAI errors (classified via the SDK's own typed
+error classes: `RateLimitError` → `rate-limited`, `APIConnectionTimeoutError`
+→ `timeout`, `APIConnectionError` → `network-error`, anything else →
+`unknown`), malformed JSON, or a response that fails `validateAiResult` —
+ends in `markFailed`, never a thrown exception left for `after()` to swallow
+silently. A `failed` row stays `failed` until a human clicks "Regenerate" —
+there is no automatic retry loop. The OpenAI SDK's own small built-in retry
+(bounded to 1, down from its default of 2 — `lib/ai/openai-client.ts`) stays
+on for transient network/5xx errors *within* that one attempt, which is
+bounded, not the "automatic retry" the brief warns against.
+
+### Cost controls, concretely
+
+- **Zero API calls in automated tests** — every test mocks
+  `lib/ai/openai-client.ts` (or the SDK's own error classes for failure
+  cases); `npm test` needs no `OPENAI_API_KEY` and makes no network call.
+- **Zero calls without a configured key** — `isAiConfigured()` gates both
+  entry points; no dangling `pending` rows when OpenAI isn't set up.
+- **Exactly one automatic attempt per link**, and never a repeat of it (see
+  "Duplicate-processing prevention" above).
+- **Bounded input**: page text capped at 6,000 characters; title/description
+  already capped by Phase 6's `LINK_INPUT_LIMITS`.
+- **Bounded output**: `max_output_tokens: 1200`, `reasoning: {effort:"low"}`
+  (Luna is a reasoning model; low effort keeps latency and invisible
+  reasoning-token cost down for a task this simple), `text.verbosity:"low"`,
+  plus schema `minItems`/`maxItems` on `topics`/`keyPoints` and a character
+  ceiling on `summary`.
+- **No personal note, ever** — structurally absent from the request type.
+
+### UI
+
+`components/links/ai-insights-panel.tsx` on the link detail page, the four
+states from the brief's mockup (not analyzed / processing / completed /
+failed). While `pending`/`processing`, it polls via `router.refresh()` a
+bounded number of times (10 attempts, 3 seconds apart, then stops) so a page
+left open shows the result without a manual reload — though a manual reload
+always works too, since the AI attempt runs entirely server-side regardless
+of whether anyone is watching. "Regenerate AI" calls
+`lib/actions/ai.ts`'s `regenerateAiInsights` directly.
+
+### Chrome extension
+
+Unchanged architecture — the extension still only ever calls
+`app/api/extension/links`, which calls the same `createLinkForUser` that
+now triggers AI enrichment automatically. The response gained one field,
+`aiEnabled` (whether `OPENAI_API_KEY` is configured), purely so the popup's
+success copy can say "Saved — AI analysis in progress" instead of a plain
+"Saved to LinkBrain" — the extension never calls OpenAI, never sees an API
+key, and has no other AI-related code at all.
+
 ## Why so few dependencies
 
 Beyond the framework: `lucide-react` (icons), `clsx` + `tailwind-merge` (the
@@ -818,3 +1048,7 @@ layer), no second state-management library — Server Actions plus
 Phase 6 adds exactly one: `@types/chrome` (types only, no runtime code) so
 the extension's own `tsc` build — no bundler — can typecheck against real
 Chrome extension APIs.
+
+Phase 7 adds exactly one: `openai`, the official Node SDK — no validation
+library added alongside it (see "AI enrichment"'s note on why
+`lib/ai/schema.ts` hand-validates instead of using Zod).

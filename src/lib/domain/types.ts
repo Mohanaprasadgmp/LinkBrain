@@ -49,6 +49,30 @@ export interface Link {
   updatedAt: string;
 }
 
+/** Where an AI enrichment attempt sits in its lifecycle. See `lib/ai/ai-service.ts`. */
+export type AiProcessingStatus = "pending" | "processing" | "completed" | "failed";
+
+/**
+ * AI-generated enrichment for a link (Phase 7) — kept as its own type,
+ * never merged into `Link`, mirroring the dedicated `link_ai_insights`
+ * table. `null` fields mean "not populated yet" (status isn't `completed`)
+ * rather than "empty."
+ */
+export interface AiInsight {
+  id: string;
+  linkId: string;
+  status: AiProcessingStatus;
+  summary: string | null;
+  category: string | null;
+  topics: string[];
+  keyPoints: string[];
+  contentType: string | null;
+  /** A coarse, safe category (never a raw error message) — see `MetadataFailureReason` for the same pattern. */
+  errorReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** A named collection of links, e.g. "AWS Learning". */
 export interface Project {
   id: string;

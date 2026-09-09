@@ -1,10 +1,7 @@
 /**
  * Metadata extraction types.
  *
- * Framework-free — no React, no repository, no Server Action shapes — so this
- * module stays reusable when a later phase adds content extraction and
- * Claude processing on top of the same fetch (see `extract-metadata.ts`'s
- * doc comment for how that's expected to slot in).
+ * Framework-free — no React, no repository, no Server Action shapes.
  */
 
 /** What a page's metadata resolves to, after applying precedence rules. */
@@ -18,7 +15,17 @@ export interface PageMetadata {
 }
 
 export type MetadataResult =
-  | { ok: true; metadata: PageMetadata }
+  | {
+      ok: true;
+      metadata: PageMetadata;
+      /**
+       * The raw HTML this result was parsed from (Phase 7) — exposed so
+       * `lib/ai/ai-service.ts` can extract body text for AI analysis from
+       * the *same* SSRF-checked, size-limited fetch, instead of fetching
+       * the URL a second time.
+       */
+      html: string;
+    }
   | { ok: false; reason: MetadataFailureReason };
 
 /**

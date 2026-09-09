@@ -32,6 +32,25 @@ vi.mock("@/lib/metadata", () => ({
  */
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
+/**
+ * `after()` also requires a real Next.js request context. Mocked to invoke
+ * its callback immediately (rather than truly deferring it) purely so these
+ * tests can assert on the call without needing to simulate a request
+ * lifecycle — production behavior (deferred until after the response is
+ * sent) is Next's own, already-relied-upon guarantee, not this app's code.
+ */
+const afterMock = vi.fn((callback: () => unknown) => callback());
+vi.mock("next/server", () => ({ after: (callback: () => unknown) => afterMock(callback) }));
+
+const isAiConfiguredMock = vi.fn();
+const processLinkAiMock = vi.fn();
+vi.mock("@/lib/ai/openai-client", () => ({
+  isAiConfigured: () => isAiConfiguredMock(),
+}));
+vi.mock("@/lib/ai/ai-service", () => ({
+  processLinkAi: (...args: unknown[]) => processLinkAiMock(...args),
+}));
+
 let userId: string;
 let otherUserId: string;
 
@@ -45,6 +64,11 @@ afterAll(cleanupTestData);
 beforeEach(() => {
   extractMetadataMock.mockReset();
   extractMetadataMock.mockResolvedValue({ ok: false, reason: "network-error" });
+  afterMock.mockReset();
+  afterMock.mockImplementation((callback: () => unknown) => callback());
+  processLinkAiMock.mockReset();
+  isAiConfiguredMock.mockReset();
+  isAiConfiguredMock.mockReturnValue(false);
 });
 
 describe("createLinkForUser", () => {
@@ -166,5 +190,61 @@ describe("createLinkForUser", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.link.projectId).toBeNull();
+  });
+});
+
+describe("createLinkForUser — AI enrichment trigger", () => {
+  it("does not create an AI insight row or call processLinkAi when AI isn't configured", async () => {
+    isAiConfiguredMock.mockReturnValue(false);
+    const { getAiInsightRepository } = await import("@/lib/data");
+    const { createLinkForUser } = await import("./link-service");
+
+    const result = await createLinkForUser(userId, { url: testUrl("ai-not-configured"), title: "" });
+
+    expect(result.ok).toBe(true);
+    expect(processLinkAiMock).not.toHaveBeenCalled();
+    if (result.ok) {
+      expect(await getAiInsightRepository().getByLinkId(result.link.id)).toBeNull();
+    }
+  });
+
+  it("creates a pending AI insight row and schedules processing via after() when AI is configured", async () => {
+    isAiConfiguredMock.mockReturnValue(true);
+    const { getAiInsightRepository } = await import("@/lib/data");
+    const { createLinkForUser } = await import("./link-service");
+
+    const result = await createLinkForUser(userId, { url: testUrl("ai-configured"), title: "My title" });
+
+    expect(result.ok).toBe(true);
+    expect(afterMock).toHaveBeenCalledTimes(1);
+    expect(processLinkAiMock).toHaveBeenCalledTimes(1);
+    if (result.ok) {
+      const [linkId, context] = processLinkAiMock.mock.calls[0];
+      expect(linkId).toBe(result.link.id);
+      expect(context.title).toBe("My title");
+
+      const insight = await getAiInsightRepository().getByLinkId(result.link.id);
+      // The mocked after() runs the callback synchronously (and the mocked
+      // processLinkAi doesn't touch the row), so it's still "pending" here
+      // — proving the row exists *before* processing runs, which is what
+      // lets the UI show "Analyzing..." immediately rather than "not
+      // analyzed" while the real OpenAI call is in flight.
+      expect(insight?.status).toBe("pending");
+    }
+  });
+
+  it("never calls processLinkAi when the save itself fails (duplicate)", async () => {
+    isAiConfiguredMock.mockReturnValue(true);
+    const { createLinkForUser } = await import("./link-service");
+    const url = testUrl("ai-duplicate-skip");
+    await createLinkForUser(userId, { url, title: "First" });
+    processLinkAiMock.mockClear();
+    afterMock.mockClear();
+
+    const duplicate = await createLinkForUser(userId, { url, title: "Second" });
+
+    expect(duplicate.ok).toBe(false);
+    expect(processLinkAiMock).not.toHaveBeenCalled();
+    expect(afterMock).not.toHaveBeenCalled();
   });
 });

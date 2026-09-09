@@ -47,3 +47,5 @@ next-env.d.ts
 # extension build output (see extension/README.md — npm run build:extension / package:extension)
 /extension/dist/
 /extension/linkbrain-extension.zip
+
+/notes.txt

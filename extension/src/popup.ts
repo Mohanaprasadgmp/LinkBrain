@@ -150,6 +150,11 @@ async function main() {
 
     const response = result.data;
     if (response.ok) {
+      // AI enrichment (Phase 7) always happens backend-side, asynchronously
+      // — the extension never calls OpenAI itself and never waits for it.
+      el<HTMLParagraphElement>("success-title").textContent = response.aiEnabled
+        ? "Saved — AI analysis in progress"
+        : "Saved to LinkBrain";
       showView("view-success");
       el<HTMLButtonElement>("open-saved-link").onclick = () => openInNewTab(response.link.detailUrl);
       el<HTMLButtonElement>("save-another").onclick = () => showView("view-save");

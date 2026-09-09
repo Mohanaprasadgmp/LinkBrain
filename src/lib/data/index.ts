@@ -1,8 +1,9 @@
 import "server-only";
 
+import { DrizzleAiInsightRepository } from "./drizzle-ai-insight-repository";
 import { DrizzleLinkRepository } from "./drizzle-link-repository";
 import { DrizzleProjectRepository } from "./drizzle-project-repository";
-import type { LinkRepository, ProjectRepository } from "./repository";
+import type { AiInsightRepository, LinkRepository, ProjectRepository } from "./repository";
 
 /**
  * The one place a future backend swap would touch: everything else in the
@@ -10,6 +11,7 @@ import type { LinkRepository, ProjectRepository } from "./repository";
  */
 let linkRepository: LinkRepository | undefined;
 let projectRepository: ProjectRepository | undefined;
+let aiInsightRepository: AiInsightRepository | undefined;
 
 export function getLinkRepository(): LinkRepository {
   return (linkRepository ??= new DrizzleLinkRepository());
@@ -17,6 +19,10 @@ export function getLinkRepository(): LinkRepository {
 
 export function getProjectRepository(): ProjectRepository {
   return (projectRepository ??= new DrizzleProjectRepository());
+}
+
+export function getAiInsightRepository(): AiInsightRepository {
+  return (aiInsightRepository ??= new DrizzleAiInsightRepository());
 }
 
 export {

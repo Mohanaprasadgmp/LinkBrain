@@ -44,7 +44,7 @@ export interface SaveLinkRequest {
 }
 
 export type SaveLinkResponse =
-  | { ok: true; link: SavedLinkSummary; metadataApplied: boolean }
+  | { ok: true; link: SavedLinkSummary; metadataApplied: boolean; aiEnabled: boolean }
   | { ok: false; error: string; duplicate?: boolean; existingLink?: SavedLinkSummary };
 
 /** The message `ConnectPanel` (web app) sends via `chrome.runtime.sendMessage`. */

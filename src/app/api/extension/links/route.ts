@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { isAiConfigured } from "@/lib/ai/openai-client";
 import { getCurrentUser } from "@/lib/auth/session";
 import type { Link } from "@/lib/domain/types";
 import { extensionPreflight, withExtensionCors } from "@/lib/extension/cors";
@@ -8,6 +9,16 @@ import { linkDetailUrl } from "@/lib/extension/app-url";
 import { isRateLimited } from "@/lib/extension/rate-limit";
 import { validateLinkRequest } from "@/lib/extension/validate-link-request";
 import { createLinkForUser } from "@/lib/services/link-service";
+
+/**
+ * Phase 7: `createLinkForUser` schedules AI enrichment via `next/server`'s
+ * `after()`, which runs within this same function invocation after the
+ * response below has already been sent. The default duration is generous
+ * on Vercel's Fluid Compute (300s), but this is set explicitly so the AI
+ * call always has room regardless of platform default — see
+ * `docs/ARCHITECTURE.md`'s "AI enrichment" section.
+ */
+export const maxDuration = 30;
 
 /**
  * `POST /api/extension/links` — the Chrome extension's only mutation
@@ -90,7 +101,12 @@ export async function POST(request: NextRequest) {
   return withExtensionCors(
     request,
     NextResponse.json(
-      { ok: true, link: summarize(result.link), metadataApplied: result.metadataApplied },
+      {
+        ok: true,
+        link: summarize(result.link),
+        metadataApplied: result.metadataApplied,
+        aiEnabled: isAiConfigured(),
+      },
       { status: 201 },
     ),
   );
