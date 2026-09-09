@@ -16,6 +16,11 @@
     "build:extension": "tsc -p extension/tsconfig.json",
     "package:extension": "node extension/scripts/package.mjs"
   },
+  "overrides": {
+    "better-auth": {
+      "vitest": "$vitest"
+    }
+  },
   "dependencies": {
     "better-auth": "^1.7.3",
     "cheerio": "^1.2.0",
