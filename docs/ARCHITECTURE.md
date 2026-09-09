@@ -583,12 +583,14 @@ signed-out browser visit):
 ### CORS and origin policy
 
 Scoped to these three routes only (`lib/extension/cors.ts`) —
-`Access-Control-Allow-Origin` is always the exact pinned
-`chrome-extension://<EXTENSION_ID>` origin, never `*`, with `OPTIONS`
-preflight handling for the `Authorization`/`Content-Type` headers the
-extension sends. No other route's CORS behaviour changed; Better Auth's own
-`[...all]` route in particular is untouched (see "Sign-out is local-only"
-above for why that was possible).
+`Access-Control-Allow-Origin` is always one exact origin from
+`config/extension.ts`'s `EXTENSION_ORIGINS` list, never `*` and never a
+reflected arbitrary `Origin` header, with `OPTIONS` preflight handling for
+the `Authorization`/`Content-Type` headers the extension sends. No other
+route's CORS behaviour changed; Better Auth's own `[...all]` route in
+particular is untouched (see "Sign-out is local-only" above for why that was
+possible). `EXTENSION_ORIGINS` being a list rather than one value is Phase
+6B's change — see "Hosting and production configuration" below for why.
 
 ### Rate limiting
 
@@ -640,18 +642,161 @@ added before packaging for anything but local development — there is no
 build-time env injection (no bundler, by design; see "Why so few
 dependencies"). `app/api/extension/*` reuses `BETTER_AUTH_URL` (already this
 app's own base URL) to build absolute `detailUrl` links in its responses —
-no new server env var needed.
+no new server env var needed. Full step-by-step in `extension/README.md`'s
+"Hosted configuration" and "Chrome Web Store publishing" sections.
 
 ### Known limitations
 
-- Publishing to the Chrome Web Store mints a new extension id; `EXTENSION_ID`,
-  `manifest.json`'s `key`, and `externally_connectable.matches` would all need
-  updating together. Not done in this phase (explicitly out of scope).
 - Extension sign-out is local-only (see above) — no remote "revoke this
   device" without the `multi-session` plugin.
 - Rate limiting is in-memory/per-process (see above).
 - No offline queueing: a save while offline simply fails with a network
   error, matching the brief's explicit non-goal of offline sync.
+- Chrome Web Store publishing is prepared (packaging script, documented
+  steps) but not performed in this phase — see "Hosting and production
+  configuration" below for the extension-id lifecycle this implies.
+
+## Hosting and production configuration (Phase 6B)
+
+Phase 6B makes the existing app/database/extension architecture reachable
+over the public internet — it does not change the architecture itself.
+There is deliberately **one** Neon database and **one** environment; nothing
+here introduces a dev/staging/prod split.
+
+```
+User
+ │
+ ├── Browser ──────────────► LinkBrain Web App ──► Vercel / Next.js
+ │                                                       │
+ └── Chrome Extension ──► app/api/extension/* ───────────┤
+                                                          ▼
+                                              Better Auth (bearer or cookie)
+                                                          │
+                                                          ▼
+                                        lib/services/link-service.ts /
+                                        repository.forUser(userId)
+                                                          │
+                                                          ▼
+                                                Neon PostgreSQL (unchanged)
+```
+
+### What needed no code change, and why (checked against the installed Better Auth version's source)
+
+- **Secure cookies**: `node_modules/better-auth/dist/cookies/index.mjs`
+  derives the `Secure` cookie attribute from whether `baseURL`
+  (`BETTER_AUTH_URL`) starts with `https://`. Set that env var to the real
+  hosted URL and secure cookies follow automatically.
+- **Trusted origins / CSRF**: `node_modules/better-auth/dist/context/helpers.mjs`'s
+  `getTrustedOrigins` always trusts `baseURL`'s own origin, plus anything
+  listed in the optional `BETTER_AUTH_TRUSTED_ORIGINS` env var (comma-
+  separated — read directly from `process.env` by Better Auth's own `@better-auth/core/env`
+  helper, no code in this app reads or wires it). Useful during a domain
+  transition (a `*.vercel.app` URL and a later custom domain, both trusted
+  at once); unset otherwise.
+- **Serverless-compatible database access**: `lib/db/index.ts` uses the
+  `postgres` package over the Node.js runtime (nothing in this app opts into
+  `export const runtime = "edge"`), and `.env.example` already specifies
+  Neon's **pooled** (PgBouncer) connection string — exactly what a
+  serverless platform's many short-lived function instances need to avoid
+  exhausting Postgres's own connection limit. Using the *unpooled* Neon
+  connection string in production would eventually exhaust connections
+  under real concurrent traffic — this is the one field most likely to be
+  filled in wrong.
+
+### Vercel deployment
+
+Standard Next.js app — Vercel auto-detects the framework, build command
+(`next build`), and install command (`npm install`); no `vercel.json`
+needed. **Every** `DATABASE_URL`/`BETTER_AUTH_SECRET`/`BETTER_AUTH_URL`/
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` value must be set in Vercel's
+Project Settings → Environment Variables **before the first deploy** — as
+"A consequence worth naming" above already documents, `lib/auth.ts`
+constructs the Better Auth instance eagerly at module load, so `next build`
+itself needs these, not just requests after deploy. A build that appears to
+"succeed locally" proves nothing about a Vercel build missing one of these.
+
+### Google OAuth callback URL
+
+Once the hosted URL is known, register this exact redirect URI in the
+Google Cloud Console OAuth client's "Authorized redirect URIs":
+
+```
+{BETTER_AUTH_URL}/api/auth/callback/google
+```
+
+(e.g. `https://linkbrain.vercel.app/api/auth/callback/google`). Nothing else
+changes — `lib/auth.ts`'s `socialProviders.google` block already reads
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` from the environment and is
+omitted entirely when either is unset, exactly as it was for local dev.
+
+### Database migrations for the hosted deployment
+
+No schema changes ship in Phase 6B. If the hosted deployment's Neon database
+hasn't already had migrations `0001`–`0004` applied (it has, if you've been
+developing against it locally — this is the *same* database, not a new
+one), run the existing `npm run db:migrate` (`drizzle-kit migrate`) once
+before or after the first deploy. **Never run `npm run db:seed`** against
+this database once it holds anything beyond throwaway fixtures — see
+"Seed-script safety guard" below.
+
+### Seed-script safety guard
+
+`lib/db/seed.ts` wipes and reseeds `links`/`projects` — safe when a database
+holds nothing but dev fixtures, not once it's the same database a hosted
+app's real users write to. It now refuses to run unless
+`I_UNDERSTAND_THIS_WIPES_DATA=yes` is set, printing that instruction instead
+of proceeding silently. This is a deliberate extra step, not a workaround —
+there is no automatic environment detection here (there's only one
+environment), just a confirmation gate before a destructive command.
+
+### Extension-id lifecycle: dev-pinned vs. Chrome-Web-Store-assigned
+
+`config/extension.ts`'s `EXTENSION_ID`/`EXTENSION_ORIGIN` (Phase 6, singular)
+became `EXTENSION_IDS`/`EXTENSION_ORIGINS` (Phase 6B, a short list) because
+the two ids are genuinely different things with different lifecycles:
+
+- **Dev id** (`dngfnacmgpaglgoeealhgkfljnmekpoe`): deterministic from the
+  public key pinned in `extension/manifest.json`, known today, used for
+  local `Load unpacked` testing.
+- **Chrome Web Store id**: assigned by Google at first publish. Confirmed
+  against Chrome's own developer documentation: the Web Store **rejects** a
+  manifest containing a `"key"` field on that first upload, so the pinned
+  dev key cannot simply carry over — the real id is unknowable until the
+  user has actually published the extension once. `extension/scripts/package.mjs`
+  (`npm run package:extension`) automates stripping `"key"` from the
+  packaged manifest so this can't be gotten wrong by accident.
+
+`lib/extension/cors.ts` and `components/extension/connect-panel.tsx` both
+read the `EXTENSION_IDS`/`EXTENSION_ORIGINS` list rather than a single
+value, so once the user has the real Web Store id (visible in the developer
+dashboard after first publish), adding it to that one array is the entire
+code change — CORS and the connect handoff (which now tries each id in the
+list in turn, since normally only one of dev/store is actually installed in
+a given browser) both pick it up automatically. `extension/src/background.ts`'s
+`TRUSTED_ORIGINS` (the *web*-origin side of the same handshake) needs the
+hosted app's origin added the same way, alongside `manifest.json`'s
+`externally_connectable.matches` — see `extension/README.md`.
+
+### Privacy and Terms pages
+
+`app/(legal)/privacy` and `app/(legal)/terms` — same zero-cost route-group
+pattern as `(auth)`/`(workspace)`, no sidebar/topbar chrome. `proxy.ts`
+gained a `PUBLIC_PATHS` list (alongside the existing `AUTH_PATHS`) so these
+are reachable whether or not the visitor is signed in, without being
+redirected either way. Content is specific to what this app actually does
+(metadata extraction, what the extension reads/stores, no analytics, no data
+sales) rather than generic boilerplate, and says plainly that it isn't a
+substitute for professional legal advice. Linked from the sign-in/sign-up
+footer and a small "Legal" row in Settings.
+
+### What this phase does not do
+
+Actual deployment execution (connecting the repo in Vercel, setting its
+dashboard env vars, buying/attaching a domain), creating real Google OAuth
+credentials, and Chrome Web Store registration/publishing all require
+accounts and credentials this environment doesn't have — every one of those
+is a manual step for the project owner, documented above and in
+`extension/README.md` rather than performed automatically.
 
 ## Why so few dependencies
 

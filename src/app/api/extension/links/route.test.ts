@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { EXTENSION_ORIGIN } from "@/config/extension";
+import { EXTENSION_ORIGINS } from "@/config/extension";
+
+const EXTENSION_ORIGIN = EXTENSION_ORIGINS[0];
 import { cleanupTestData, createTestUser, testUrl } from "@/lib/data/test-helpers";
 
 /**

@@ -20,21 +20,28 @@ import { getSessionCookie } from "better-auth/cookies";
  */
 const AUTH_PATHS = ["/sign-in", "/sign-up"];
 
-function isAuthPath(pathname: string): boolean {
-  return AUTH_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+/**
+ * Public informational pages (Phase 6B: `/privacy`, `/terms`) — reachable
+ * whether or not the visitor is signed in. Unlike `AUTH_PATHS`, a signed-in
+ * visitor is never redirected away from these; they're just always allowed.
+ */
+const PUBLIC_PATHS = ["/privacy", "/terms"];
+
+function matchesPath(paths: string[], pathname: string): boolean {
+  return paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionCookie = getSessionCookie(request);
 
-  if (!sessionCookie && !isAuthPath(pathname)) {
+  if (!sessionCookie && !matchesPath(AUTH_PATHS, pathname) && !matchesPath(PUBLIC_PATHS, pathname)) {
     const signInUrl = new URL("/sign-in", request.url);
     signInUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(signInUrl);
   }
 
-  if (sessionCookie && isAuthPath(pathname)) {
+  if (sessionCookie && matchesPath(AUTH_PATHS, pathname)) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

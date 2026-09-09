@@ -158,6 +158,16 @@ export function SettingsView({ user }: { user: SessionUser }) {
             {isSigningOut ? "Signing out..." : "Sign out"}
           </Button>
         </SettingsRow>
+        <SettingsRow label="Legal">
+          <div className="flex gap-4 text-sm">
+            <Button variant="ghost" size="sm" onClick={() => router.push("/privacy")}>
+              Privacy Policy
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => router.push("/terms")}>
+              Terms of Service
+            </Button>
+          </div>
+        </SettingsRow>
       </SettingsSection>
     </div>
   );

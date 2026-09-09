@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { getExtensionHandoffToken } from "@/lib/actions/extension";
 import type { SessionUser } from "@/lib/auth/session";
-import { EXTENSION_ID } from "@/config/extension";
+import { EXTENSION_IDS } from "@/config/extension";
 import { Button } from "@/components/ui/button";
 import { Panel, SectionHeading } from "@/components/ui/panel";
 
@@ -30,6 +30,38 @@ type ChromeRuntime = {
 function getChromeRuntime(): ChromeRuntime | null {
   const chrome = (window as unknown as { chrome?: { runtime?: ChromeRuntime } }).chrome;
   return chrome?.runtime?.sendMessage ? chrome.runtime : null;
+}
+
+/**
+ * `EXTENSION_IDS` (`config/extension.ts`) holds the dev id and, once
+ * published, the Chrome-Web-Store-assigned id — normally only one of the
+ * two is actually installed in a given browser. `sendMessage` fails with
+ * `chrome.runtime.lastError` (no response) for an id that isn't installed,
+ * so this tries each in turn and stops at the first real connection,
+ * without needing to know in advance which one is running.
+ */
+function sendConnectMessage(
+  runtime: ChromeRuntime,
+  extensionId: string,
+  token: string,
+  user: { id: string; name: string; email: string },
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    runtime.sendMessage(extensionId, { type: "linkbrain:connect", token, user }, (response) => {
+      resolve(!runtime.lastError && (response as { ok?: boolean } | undefined)?.ok === true);
+    });
+  });
+}
+
+async function connectToAnyInstalledExtension(
+  runtime: ChromeRuntime,
+  token: string,
+  user: { id: string; name: string; email: string },
+): Promise<boolean> {
+  for (const extensionId of EXTENSION_IDS) {
+    if (await sendConnectMessage(runtime, extensionId, token, user)) return true;
+  }
+  return false;
 }
 
 type ConnectState = "connecting" | "connected" | "not-detected" | "error";
@@ -63,15 +95,8 @@ export function ConnectPanel({ user }: { user: SessionUser }) {
         return;
       }
 
-      runtime.sendMessage(
-        EXTENSION_ID,
-        { type: "linkbrain:connect", token: handoff.token, user: handoff.user },
-        (response) => {
-          if (cancelled) return;
-          const ok = !runtime.lastError && (response as { ok?: boolean } | undefined)?.ok;
-          setState(ok ? "connected" : "error");
-        },
-      );
+      const connected = await connectToAnyInstalledExtension(runtime, handoff.token, handoff.user);
+      if (!cancelled) setState(connected ? "connected" : "not-detected");
     }
 
     void connect();

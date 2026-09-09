@@ -13,7 +13,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx --conditions react-server src/lib/db/seed.ts",
     "test": "vitest run",
-    "build:extension": "tsc -p extension/tsconfig.json"
+    "build:extension": "tsc -p extension/tsconfig.json",
+    "package:extension": "node extension/scripts/package.mjs"
   },
   "dependencies": {
     "better-auth": "^1.7.3",

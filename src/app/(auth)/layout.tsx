@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Logo } from "@/components/layout/logo";
@@ -41,6 +42,17 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-overlay sm:p-8">
           {children}
         </div>
+        <p className="text-center text-xs text-ink-subtle">
+          By continuing, you agree to the{" "}
+          <Link href="/terms" className="underline hover:text-ink-muted">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="underline hover:text-ink-muted">
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </div>
     </div>
   );

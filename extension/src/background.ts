@@ -12,10 +12,18 @@ import type { ConnectMessage } from "./types.js";
  * Kept in sync with `manifest.json`'s `externally_connectable.matches` —
  * that field is the actual enforcement point (Chrome won't invoke this
  * listener at all for a non-matching page), this list only re-checks it.
- * Add the production LinkBrain origin to both before packaging for a
- * deployed instance (see `README.md`).
+ * Add the hosted LinkBrain origin to both before packaging for a deployed
+ * instance (see `README.md`'s "Hosted configuration" section) — e.g.
+ * "https://linkbrain.example.com". Keeping `localhost` here too is
+ * deliberate even in a production package: it costs nothing (Chrome only
+ * ever calls this listener for a page `externally_connectable.matches`
+ * already allowed) and means the same build still works against a local
+ * dev server if ever needed.
  */
-const TRUSTED_ORIGINS = ["http://localhost:3000"];
+const TRUSTED_ORIGINS = [
+  "http://localhost:3000",
+  // "https://<your-hosted-domain>", // add once deployed — see README.md
+];
 
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   if (!isConnectMessage(message)) return false;

@@ -84,7 +84,35 @@ async function ensureDevUser(): Promise<string> {
   return created.user.id;
 }
 
+/**
+ * This project deliberately has only one database (see
+ * `docs/ARCHITECTURE.md`'s "Hosting and production configuration") — the
+ * same Neon instance a hosted deployment's real users write to. This script
+ * deletes every row in `links`/`projects` before reseeding fixtures, which
+ * was always safe when the database held nothing but dev fixtures, but is
+ * exactly the kind of accidental data loss worth one deliberate extra step
+ * to guard against now. Require an explicit opt-in rather than running
+ * silently.
+ */
+function requireExplicitConfirmation() {
+  if (process.env.I_UNDERSTAND_THIS_WIPES_DATA === "yes") return;
+
+  console.error(
+    [
+      "Refusing to run: this deletes every row in `links` and `projects`",
+      "before reseeding fixture data. There is only one database in this",
+      "project, so this could destroy real, non-fixture data.",
+      "",
+      "If you're certain this is safe to wipe, re-run as:",
+      "",
+      "  I_UNDERSTAND_THIS_WIPES_DATA=yes npm run db:seed",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+
 async function seed() {
+  requireExplicitConfirmation();
   const db = getDb();
 
   console.log("Ensuring the development user exists...");
